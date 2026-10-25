@@ -8,7 +8,7 @@ const { GAP_REQUEST_BY_MODE_MAP } = require('../../caption-pipeline/output/gap-i
 const MODEL_CONFIG_KEY_LIST = [
   'vlmUrl', 'vlmModel', 'asrUrl', 'ttsUrl', 'ttsLongUrl', 'embedUrl', 'bedrockRegion', 'bedrockModelId',
   'judgeBackend', 'judgeGpuUrl', 'judgeGpuModel', 'judgeModelId',
-  'summaryModelId', 'summaryRewriteModelId', 'gapRequestByModeMap', 'routerMode', 'isScaleEnabled', 'hasBedrockCredentials',
+  'gapRequestByModeMap', 'routerMode', 'isScaleEnabled', 'hasBedrockCredentials',
   // 해설 내용·화면 근거 스위치. 실험실 회차마다 무엇을 켜고 돌렸는지 run.json 만 보고 알 수 있게 남긴다.
   'contentSwitch', 'isScreenTextGroundingEnabled', 'isFactCardEnabled', 'factCardAgentList', 'factCardJsonMode', 'chartEstimateMode',
   'speechRoiMode', 'speechRoiTypeList', 'isSpeechRoiFrameOcrEnabled', 'isSpeechRoiPointingPairEnabled',
