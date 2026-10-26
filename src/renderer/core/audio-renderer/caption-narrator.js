@@ -2,7 +2,7 @@ import { SIC_CATCHUP_MIN_RATE, SIC_CATCHUP_MAX_RATE, SIC_CATCHUP_RATE_PER_SEC } 
 import { NarrationQueue, QUEUE_DROP_REASON_MAP, readEntryAudio } from './narration-queue.js';
 import { isImmediateCaption } from './narration-entry.js';
 import {
-  computeGainFromDecibel, createSidePanner, DEFAULT_DUCK_DB, NARRATION_PAN, buildPlayStartInfo,
+  computeGainFromDecibel, createSpatialPanner, DEFAULT_DUCK_DB, ANSWER_OVERLAY_POSITION_X, buildPlayStartInfo,
 } from './narration-mixer.js';
 import { defaultUiText } from '../i18n/ui-text.js';
 
@@ -57,7 +57,7 @@ export class CaptionNarrator {
     this.ttsGainNode = this.audioContext.createGain();
     this.ttsGainNode.connect(this.audioContext.destination);
     this.ttsGainNode.connect(this.analyserNode);
-    this.answerPanner = createSidePanner({ audioContext: this.audioContext, pan: NARRATION_PAN });
+    this.answerPanner = createSpatialPanner({ audioContext: this.audioContext, positionX: ANSWER_OVERLAY_POSITION_X });
     this.answerPanner.connect(this.ttsGainNode);
 
     try {

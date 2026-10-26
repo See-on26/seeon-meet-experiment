@@ -4,10 +4,13 @@ import { defaultUiText } from '../i18n/ui-text.js';
 export const DEFAULT_DUCK_DB = -12;
 const DEFAULT_RAMP_MS = 120;
 const START_LEAD_SEC = 0.02;
-// 소리 방향을 화면 배치와 맞춘다. 회의 화면은 왼쪽, SEEON 패널은 오른쪽이라 회의 소리는 왼쪽 채널, 해설·답은 오른쪽 채널로 나눈다.
-// 스테레오 패너를 끝까지(±1) 밀어 반대쪽 채널에는 소리가 섞이지 않게 한다.
+// 소리 방향을 화면 배치와 맞춘다. 회의 화면은 왼쪽, SEEON 패널은 오른쪽이라 동시 모드에서는 회의 소리는 왼쪽 채널,
+// 해설·답은 오른쪽 채널로 나눈다. 스테레오 패너를 끝까지(±1) 밀어 반대쪽 채널에는 소리가 섞이지 않게 한다.
 const MEETING_PAN = -1;
-export const NARRATION_PAN = 1;
+const NARRATION_PAN = 1;
+// 교차 모드의 질문 답은 회의 소리를 줄인 채 겹쳐 튼다. 채널을 나누지 않고 오른쪽에서 들리게만 해 한쪽 귀로도 들린다.
+export const ANSWER_OVERLAY_POSITION_X = 0.7;
+const PANNER_DISTANCE_Z = -0.4;
 
 // 재생 시작 알림에 싣는 정보. 음성 데이터는 빼고, 무엇이 언제부터 얼마 동안 들렸는지만 남긴다.
 export function buildPlayStartInfo({ entry, durationSec, wallMs }) {
@@ -29,9 +32,23 @@ export function computeGainFromDecibel({ decibel }) {
   return 10 ** (decibel / 20);
 }
 
+// 스테레오 입력을 끝까지 밀면 좌우가 한쪽 채널로 더해져 두 배로 커진다(Meet 탭 소리는 보통 2채널).
+// 1채널로 내려 섞은 뒤(좌우 평균) 한쪽으로 보낸다.
 export function createSidePanner({ audioContext, pan }) {
   const panner = audioContext.createStereoPanner();
+  panner.channelCount = 1;
+  panner.channelCountMode = 'explicit';
   panner.pan.value = pan;
+  return panner;
+}
+
+export function createSpatialPanner({ audioContext, positionX }) {
+  const panner = audioContext.createPanner();
+  panner.panningModel = 'HRTF';
+  panner.distanceModel = 'linear';
+  panner.positionX.value = positionX;
+  panner.positionY.value = 0;
+  panner.positionZ.value = PANNER_DISTANCE_Z;
   return panner;
 }
 
