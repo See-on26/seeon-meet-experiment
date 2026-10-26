@@ -68,6 +68,12 @@ test('설치본에 넣지 않는 줄 수를 센다(빈 줄은 세지 않는다) 
   assert.equal(countUnpackagedEnvLine('SEEON_ASR_LANGUAGE=ko  \r\n'), 0);
 });
 
+test('설치본 .env: 줄 가운데 CR·줄 구분 문자가 있어도 멈추지 않고 앱이 읽는 대로 거른다', () => {
+  assert.equal(sanitizeEnvText('SEEON_ASR_URL=v\r\r\nSEEON_ASR_LANGUAGE=ko'), 'SEEON_ASR_URL=v\nSEEON_ASR_LANGUAGE=ko');
+  assert.equal(countUnpackagedEnvLine('SEEON_ASR_URL=v\r\r\n'), 0);
+  assert.doesNotThrow(() => sanitizeEnvText('SEEON_ASR_URL=a\u2028b'));
+});
+
 test('env 글에서 값 하나를 읽는다(따옴표·export 허용, 없으면 null)', () => {
   const text = 'A=1\nexport SEEON_GPU_SSH_KEY="/Users/me/key"\n';
   assert.equal(readEnvValue(text, 'SEEON_GPU_SSH_KEY'), '/Users/me/key');

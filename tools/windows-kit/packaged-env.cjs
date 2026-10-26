@@ -6,7 +6,7 @@ const DEV_ONLY_ENV_KEY_LIST = ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL'];
 // 앱은 외부 AI 서비스(Bedrock·OpenAI·Gemini 등)를 쓰지 않으므로 그 설정은 SEEON_ 으로 시작해도 넣지 않는다.
 const UNUSED_APP_ENV_KEY_PREFIX_LIST = ['SEEON_BEDROCK_'];
 
-const ENV_ENTRY_PATTERN = /^(\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*)(.*)$/;
+const ENV_ENTRY_PATTERN = /^(\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*)(.*)$/s;
 const QUOTE_LIST = ['"', "'", '`'];
 
 function readEnvKey(line) {
@@ -37,13 +37,18 @@ function toPackagedEnvLine(line) {
   return key !== null && isPackagedEnvKey(key) ? stripInlineComment(line) : null;
 }
 
+// 앱(Node 의 .env 읽기)처럼 CR 은 모두 지우고 LF 로만 줄을 나눈다.
+function splitEnvLine(text) {
+  return text.replace(/\r/g, '').split('\n');
+}
+
 function sanitizeEnvText(text) {
-  return text.split(/\r?\n/).map(toPackagedEnvLine).filter((line) => line !== null).join('\n');
+  return splitEnvLine(text).map(toPackagedEnvLine).filter((line) => line !== null).join('\n');
 }
 
 // 설치본에 그대로 넣을 수 없는 줄 수(빈 줄은 세지 않는다). 줄 내용은 돌려주지 않는다.
 function countUnpackagedEnvLine(text) {
-  return text.split(/\r?\n/).filter((line) => line.trim() && toPackagedEnvLine(line) !== line.trimEnd()).length;
+  return splitEnvLine(text).filter((line) => line.trim() && toPackagedEnvLine(line) !== line.trimEnd()).length;
 }
 
 module.exports = { readEnvKey, sanitizeEnvText, countUnpackagedEnvLine, DEV_ONLY_ENV_KEY_LIST };

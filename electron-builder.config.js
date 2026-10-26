@@ -43,7 +43,7 @@ function buildKiwiModelResource({ fileExists, modelDir = DEV_KIWI_MODEL_DIR }) {
 function assertPackagedEnvFile({ envKey, text }) {
   const lineCount = countUnpackagedEnvLine(text);
   if (lineCount) {
-    throw new Error(`[dist] ${envKey} 파일에 설치본에 넣지 않는 줄(주석·다른 키)이 ${lineCount}줄 있습니다`
+    throw new Error(`[dist] ${envKey} 파일에 설치본에 넣지 않는 줄(주석·다른 키·여러 줄 값)이 ${lineCount}줄 있습니다`
       + ' — npm run dist:win:kit 으로 만들거나 SEEON_ 설정 줄만 남긴 파일을 쓰세요');
   }
 }
