@@ -14,7 +14,7 @@ function createFakeAudioContext() {
     destination: { name: 'destination' },
     createAnalyser: () => createConnectableNode({ fftSize: 0 }),
     createGain: () => createConnectableNode({ gain: { value: 1 } }),
-    createPanner: () => createConnectableNode({ positionX: { value: 0 }, positionY: { value: 0 }, positionZ: { value: 0 } }),
+    createStereoPanner: () => createConnectableNode({ pan: { value: 0 } }),
     createMediaStreamSource: () => createConnectableNode({ disconnect() {} }),
     resume: async () => {},
     close: async () => {},
@@ -23,17 +23,18 @@ function createFakeAudioContext() {
 
 const fakeStream = { getAudioTracks: () => [] };
 
-test('동시 모드: 해설은 오른쪽(SEEON 패널 쪽), 회의 소리는 왼쪽(회의 화면 쪽)에서 들린다', () => {
+test('동시 모드: 해설은 오른쪽 채널(SEEON 패널 쪽)에만, 회의 소리는 왼쪽 채널(회의 화면 쪽)에만 나온다', () => {
   const mixer = new NarrationMixer({ createAudioContext: createFakeAudioContext });
   mixer.start(fakeStream);
   const [narrationPanner] = mixer.narrationGainNode.connectedList;
   const [meetingPanner] = mixer.duckGainNode.connectedList;
-  assert.ok(narrationPanner.positionX.value > 0, `해설 positionX=${narrationPanner.positionX.value}`);
-  assert.ok(meetingPanner.positionX.value < 0, `회의 소리 positionX=${meetingPanner.positionX.value}`);
+  // 스테레오 패너를 끝까지(±1) 밀면 반대쪽 채널은 소리가 0 이다(원음이 오른쪽 귀에 섞이지 않는다).
+  assert.equal(narrationPanner.pan.value, 1);
+  assert.equal(meetingPanner.pan.value, -1);
 });
 
-test('질문 답은 모든 모드에서 해설과 같은 오른쪽에서 들린다', () => {
+test('질문 답은 모든 모드에서 해설과 같은 오른쪽 채널에서 나온다', () => {
   const narrator = new CaptionNarrator({ getLiveVideo: () => null, createAudioContext: createFakeAudioContext });
   narrator.start(fakeStream);
-  assert.ok(narrator.answerPanner.positionX.value > 0, `답 positionX=${narrator.answerPanner.positionX.value}`);
+  assert.equal(narrator.answerPanner.pan.value, 1);
 });
