@@ -85,7 +85,7 @@ const { classifyQuestion, QUESTION_ROUTE_MAP } = require('./context/question-cla
 const { createQuestionRouter } = require('./context/question-router');
 const { formatQaHistory, buildPresetQa } = require('./context/qa-history');
 const { buildCurrentScreenContextText } = require('./context/current-screen-context');
-const { createQuestionAnswerer, resolveAnswerText } = require('./context/question-answerer');
+const { createQuestionAnswerer, resolveAnswerText, resolveGroundedText } = require('./context/question-answerer');
 const { OUT_DIR, CONTEXT_DIR, CHART_FRAMES_DIR } = require('../paths');
 
 const ASR_DRAIN_TIMEOUT_MS = 8000;
@@ -1496,7 +1496,8 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
           + `${qaList.length ? ` 앞 질문 ${qaList.length}개` : ''}${routed.reason ? ` · ${routed.reason}` : ''}`,
       });
 
-      const result = routed.route === QUESTION_ROUTE_MAP.currentScreen
+      const isCurrentScreen = routed.route === QUESTION_ROUTE_MAP.currentScreen;
+      const result = isCurrentScreen
         ? await agentFieldMap[NARRATION_TYPE_MAP.userCommand].generate({
           jpegBuffer: Buffer.from(buffer), questionText,
           contextText: buildCurrentScreenContextText({ contextStore, major: currentSlideMajor }),
@@ -1507,7 +1508,9 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
           route: routed.route, slideMajorList: routed.slideMajorList, questionText, wordBudget, speakerHintNow,
           heardWallTs, heardVideoTimeMs,
         });
-      const { text, isGrounded } = resolveAnswerText({
+      // 현재 화면 답은 모델이 화면을 보고 바로 쓴 문장이라 거절 문장인지도 본다. 다른 갈래의 모델 답은 답을 만들 때 이미 걸렀고,
+      // 앱이 만든 문장(해설 다시 듣기 원문·지금 화자 등)은 거르지 않는다.
+      const { text, isGrounded } = (isCurrentScreen ? resolveAnswerText : resolveGroundedText)({
         text: result.text, isGrounded: result.isGrounded, language: getCaptionLanguage(),
       });
       contextStore.addQa({
