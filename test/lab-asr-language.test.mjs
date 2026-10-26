@@ -131,10 +131,10 @@ test('실험 viewer preload 는 제품 세션 시작 요청에 이번 실행의 
   const fake = loadLabViewerPreload({
     storageMap: new Map(), sendSyncMap: { 'lab-viewer-preset': {}, 'lab-viewer-caption-language': 'ko', 'lab-viewer-meeting-language': 'en' },
   });
-  const result = await fake.exposedMap.seeon.startPipelineSession({ mode: 'delayed', captionLanguage: 'ko', slideTextBackend: 'vlm' });
+  const result = await fake.exposedMap.seeon.startPipelineSession({ mode: 'delayed', captionLanguage: 'ko', slideTextBackend: 'vlm', isMeetingSummaryEnabled: true });
   assert.deepEqual(result, { isOk: true });
   assert.deepEqual(fake.invokeList, [
-    ['pipeline-session-start', { mode: 'delayed', asrLanguage: 'en', captionLanguage: 'ko', slideTextBackend: 'vlm' }],
+    ['pipeline-session-start', { mode: 'delayed', asrLanguage: 'en', captionLanguage: 'ko', slideTextBackend: 'vlm', isMeetingSummaryEnabled: true }],
   ]);
   // 세션을 시작할 때마다 그때의 값을 받는다.
   fake.sendSyncMap['lab-viewer-meeting-language'] = 'auto';
