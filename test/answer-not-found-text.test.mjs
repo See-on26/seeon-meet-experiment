@@ -23,6 +23,10 @@ test('거절 문장: 숫자 없이 답 전체가 못 찾았다고만 말하는 �
     '기록에는 그 사람이 누구인지 나와 있지 않습니다.', '죄송해요. 화면에 그 정보는 나와 있지 않아요.',
     "That isn't shown on the slide.", "It wasn't mentioned.", 'I could not find that.', 'It doesn’t appear on the screen.',
     'That is not provided.', 'Not shown on this slide.', 'The amount is not mentioned in the record.',
+    // 앞머리 사과·축약·짧은 꼴.
+    '죄송하지만 그 정보는 화면에 나와 있지 않아요.', '죄송해요, 화면에서 찾을 수 없어요.', "Sorry, I couldn't find that.",
+    "That's not mentioned.", "It's not shown on the slide.", 'The slide does not mention that.', '그건 화면에 안 나와요.',
+    '화면에 안 보여요.', '잘 모르겠어요.', '화면과 발화에서 찾을 수 없어요.',
   ];
   for (const text of refusalList) assert.equal(isNotFoundAnswerText(text), true, text);
 });
@@ -43,6 +47,17 @@ test('거절 문장: 못 찾았다는 말이 들어 있어도 내용이 있는 �
     // 발언을 옮긴 답, 앱이 들려준 해설 원문.
     '김동욱님이 원인은 아직 알 수 없다고 말했어요.', '발표자는 아직 결론이 나오지 않았다고 말했어요.',
     '이미지 제시, 얼굴이 보이지 않는 뒷모습 사진',
+    // 보이는 모습·내용을 말한 뒤 한 문장 안에서 일부만 모른다고 한 답(이음말·쉼표가 없어도).
+    '정장을 입은 중년 남성으로 이름은 알 수 없어요.', '안경을 쓴 여성이 웃고 있는 사진이라 이름은 확인할 수 없어요.',
+    '안경을 쓴 여성이 웃고 있어서 누구인지는 알 수 없어요.', '세 명이 회의하는 사진으로 누구인지는 확인할 수 없어요.',
+    '표지 슬라이드여서 세부 내용은 알 수 없어요.', '막대 그래프로 지역별 매출을 비교했고 정확한 값은 알 수 없어요.',
+    '표에 지역별 인구가 나오며 단위는 명시되어 있지 않아요.', '발표자는 비용 절감을 강조했고 예산은 언급하지 않았어요.',
+    '발표자는 매출이 늘었다고 했고 이유는 언급하지 않았어요.', '세 가지 대안을 비교했으며 결론은 확인할 수 없어요.',
+    '김 팀장님: 원인은 아직 확인할 수 없습니다.', '발표자는 "결과는 아직 알 수 없습니다."',
+    'Kim said the penalty clause is not specified in the contract.', 'He said the deadline was not specified yet.',
+    'The chart compares regional sales; exact values are not stated.', 'It was not visible because the slide changed quickly.',
+    // 화면 글자를 따옴표로만 옮긴 답.
+    '"요청하신 페이지를 찾을 수 없습니다."',
   ];
   for (const text of answerList) assert.equal(isNotFoundAnswerText(text), false, text);
 });
