@@ -44,6 +44,7 @@ import { NarrationAudioPrefetcher } from '../core/audio-renderer/narration-audio
 import { QuestionRecorder } from '../core/command/question-recorder.js';
 import { MeetMicGuard } from '../core/command/meet-mic-guard.js';
 import { MicQuestionController, MIC_PHASE_MAP } from '../core/command/mic-question-controller.js';
+import { readQuestionBlockedTextKey } from '../core/command/question-gate.js';
 import { CaptionNarrator } from '../core/audio-renderer/caption-narrator.js';
 import { NarrationMixer } from '../core/audio-renderer/narration-mixer.js';
 import { buildMeetReloadNotice } from '../core/ui/meet-reload-notice.js';
@@ -1439,8 +1440,9 @@ function readUserCommandLabel(command) {
 // 자유 질문이면 최근 발화(recentTranscript)를 근거로 붙인다 — 심화 질의응답 경로.
 async function askQuestion({ command = null, questionText = null, inputSource = 'typed', dedupeKey = command }) {
   if (dedupeKey && isDuplicateCommand({ dedupeKey })) return;
-  if (!captureSource.isActive) {
-    announce(t('question.notCapturing'));
+  const blockedTextKey = readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused });
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
     return;
   }
   appendAskBubble({ text: questionText || readUserCommandLabel(command) || command });
@@ -2586,7 +2588,7 @@ const questionRecorder = new QuestionRecorder({
 });
 micQuestionController = new MicQuestionController({
   recorder: questionRecorder,
-  canStart: () => captureSource.isActive,
+  readStartBlockedTextKey: () => readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused }),
   beginSession: beginMicQuestionSession,
   endSession: endMicQuestionSession,
   announce,

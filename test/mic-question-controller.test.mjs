@@ -8,7 +8,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function makeController({ startResult = true, canStart = true, beginBlock = null, endBlock = null } = {}) {
+function makeController({ startResult = true, blockedTextKey = null, beginBlock = null, endBlock = null } = {}) {
   const log = [];
   const recorder = {
     startCount: 0, toggleCount: 0, cancelCount: 0,
@@ -18,7 +18,7 @@ function makeController({ startResult = true, canStart = true, beginBlock = null
   };
   const controller = new MicQuestionController({
     recorder,
-    canStart: () => canStart,
+    readStartBlockedTextKey: () => blockedTextKey,
     beginSession: async () => { log.push('begin'); if (beginBlock) await beginBlock.promise; },
     endSession: async () => { log.push('end'); if (endBlock) await endBlock.promise; },
     announce: (text) => log.push(`announce:${text}`),
@@ -66,10 +66,17 @@ test('마무리하는 동안 누르면 무시하고, 끝나면 다시 시작할 
 });
 
 test('캡처 중이 아니면 안내만 하고 세션을 열지 않는다', async () => {
-  const { controller, recorder, log } = makeController({ canStart: false });
+  const { controller, recorder, log } = makeController({ blockedTextKey: 'question.notCapturing' });
   assert.equal(await controller.toggle(), false);
   assert.equal(recorder.startCount, 0);
   assert.deepEqual(log, ['announce:회의 캡처를 시작해야 질문할 수 있어요']);
+});
+
+test('일시정지 중이면 녹음을 시작하지 않고 일시정지 안내만 한다', async () => {
+  const { controller, recorder, log } = makeController({ blockedTextKey: 'question.paused' });
+  assert.equal(await controller.toggle(), false);
+  assert.equal(recorder.startCount, 0);
+  assert.deepEqual(log, ['announce:일시정지 중에는 질문할 수 없어요']);
 });
 
 test('녹음기가 시작하지 못하고 취소를 알리면 세션을 닫고 안내한다', async () => {
@@ -102,7 +109,7 @@ test('녹음을 마치면 답이 나올 때까지 보류를 유지하고, 답 �
   const answerBlock = deferred();
   const controller = new MicQuestionController({
     recorder: { async start() { return true; }, toggle() {}, cancel() {} },
-    canStart: () => true,
+    readStartBlockedTextKey: () => null,
     beginSession: async () => log.push('begin'),
     endSession: async ({ isAwaitingAnswer = false } = {}) => log.push(`end:${isAwaitingAnswer}`),
     announce: () => {},
@@ -123,7 +130,7 @@ test('답 처리가 실패해도 보류를 푼다', async () => {
   const log = [];
   const controller = new MicQuestionController({
     recorder: { async start() { return true; }, toggle() {}, cancel() {} },
-    canStart: () => true,
+    readStartBlockedTextKey: () => null,
     beginSession: async () => {},
     endSession: async () => {},
     announce: () => {},
@@ -140,7 +147,7 @@ test('녹음을 취소하면 답을 기다리지 않고 바로 보류를 푼다'
   const log = [];
   const controller = new MicQuestionController({
     recorder: { async start() { return true; }, toggle() {}, cancel() {} },
-    canStart: () => true,
+    readStartBlockedTextKey: () => null,
     beginSession: async () => {},
     endSession: async ({ isAwaitingAnswer = false } = {}) => log.push(`end:${isAwaitingAnswer}`),
     announce: () => {},
