@@ -64,18 +64,22 @@ const DIGIT_PATTERN = /\d/;
 const SENTENCE_SPLIT_PATTERN = /(?<=[.!?。])\s+|\n+/;
 const SENTENCE_TRIM_PATTERN = /^[\s"'`*「『“]+|[\s"'`*」』”.!?。…~]+$/g;
 // 답 전체가 따옴표 한 쌍으로 싸여 있으면 화면 글자를 옮긴 것이다("요청하신 페이지를 찾을 수 없습니다").
-const QUOTED_ANSWER_PATTERN = /^["“「『][^"“”「」『』]*["”」』][.!?。]?$/;
+const QUOTED_ANSWER_PATTERN = /^(?:["“「『][^"“”「」『』]*["”」』]|'[^']*'|‘[^‘’]*’)[.!?。]?$/;
 // 앞머리 사과는 떼고 본다("죄송하지만 그 정보는 …", "Sorry, I couldn't …").
-const APOLOGY_PREFIX_PATTERN = /^(?:죄송하지만|죄송합니다만|미안하지만|아쉽게도,?|죄송(?:합니다|해요)\s*,|(?:i'm |i am )?sorry\s*,|unfortunately\s*,)\s*/i;
+const APOLOGY_PREFIX_PATTERN = /^(?:(?:죄송하지만|죄송합니다만|미안하지만|아쉽게도)\s*,?|죄송(?:합니다|해요)\s*,|(?:(?:i'm |i am )?sorry|unfortunately)\s*,\s*(?:but\s+)?)\s*/i;
 // 사과만 하는 문장은 거절 문장 앞뒤에 붙어도 답 내용으로 보지 않는다.
 const APOLOGY_SENTENCE_PATTERN = /^(?:죄송(?:합니다|해요)|미안(?:합니다|해요)|(?:i'm |i am )?sorry|unfortunately)$/i;
 // 쉼표·따옴표·이음말이 있으면 앞에 내용 있는 절이 있거나 남의 말을 옮긴 것이라 거절 문장으로 보지 않는다.
-// "에서"(화면에서·발화에서)는 장소라 이음말 "-서"로 보지 않는다.
-const CONTENT_CLAUSE_PATTERN = new RegExp('[,;:"“”「」『』]'
-  + '|(?:지만|는데|은데|인데|이고|있고|없고|하고|되고|[았었였했]고|며|(?<!에)서|라|로)\\s'
+// 장소의 "에서·여기서", "만으로·자료로"는 이음말 "-서·-로"로 보지 않는다. 작은따옴표는 영어 축약(couldn't)과 헷갈려 띄어쓰기 뒤에 열 때만 본다.
+const CONTENT_CLAUSE_PATTERN = new RegExp('[,;:"“”「」『』]|\\s[\'‘]'
+  + '|(?:지만|는데|은데|인데|이고|있고|없고|하고|되고|[았었였했]고|며|(?<![에기])서|라|(?<!만으|자료)로)\\s'
+  + '|(?:말|말씀|설명)(?:로는|으로는)|에\\s*따르면'
   + '|\\b(?:but|although|though|however|while|and|because|since|said|says|told|explained)\\b', 'i');
-// 정보가 없다는 술어 앞에 말이 길면 내용을 말한 뒤 일부만 모른다는 답이다. 이만큼 어절 이하일 때만 거절로 본다.
-const META_PREFIX_MAX_WORD_COUNT = 4;
+// 정보가 없다는 술어 앞에 말이 길면 사람 모습 같은 내용을 말한 뒤 일부만 모른다는 답이다.
+// 장소·지시어("화면과 발화에서", "해당")를 뺀 앞말이 이만큼 어절 이하일 때만 거절로 본다.
+const KO_PREFIX_MAX_WORD_COUNT = 2;
+const KO_PREFIX_FILLER_PATTERN = /^(?:(?:(?:화면|자료|슬라이드|발화|기록|회의|발표|대화)(?:과|와|이나|나|에|에는|에서|에서는|엔|만으로|만으로는)?)|현재|지금|지금은|제시된|주어진|해당|관련|그|이|그건|이건|그것은|여기|여기서|아직|잘)$/;
+const EN_PREFIX_MAX_WORD_COUNT = 4;
 const KO_ENDING = '(?:았|었)?(?:습니다|어요|아요|네요|다|음)';
 // 무엇이 어디에 있든 정보가 없다는 뜻인 술어(명시·언급·기록·찾기·알기).
 const KO_META_REFUSAL_PATTERN = new RegExp('(?:(?:명시|기재|언급)(?:되어|돼)\\s*있지\\s*않|언급(?:되|하)지\\s*않|언급(?:이|은|도)\\s*없'
@@ -86,7 +90,8 @@ const KO_VISUAL_REFUSAL = '(?:(?:(?:나와|포함되어|포함돼|표시되어|�
   + '|(?:나오|보이|드러나|확인되)지\\s*않|없)' + KO_ENDING + '|안\\s*(?:나와|보여)(?:\\s*있어)?요)';
 const KO_VISUAL_REFUSAL_PATTERN = new RegExp(KO_VISUAL_REFUSAL + '$');
 const KO_INFO_SUBJECT_PATTERN = new RegExp('(?:^|\\s)(?:(?:해당|관련|그|이|그런|이런)\\s*)?(?:정보|내용)(?:은|는|이|가|도)\\s'
-  + '|(?:해당|관련|그|이|그런|이런)\\s*(?:항목|부분|수치|값|자료)(?:은|는|이|가|도)\\s|(?:인지|는지|은지)(?:는|도)?\\s|^(?:그건|그것은|그것도|이건)\\s');
+  + '|(?:해당|관련|그|이|그런|이런)\\s*(?:항목|부분|수치|값|자료)(?:은|는|이|가|도)\\s|^(?:그건|그것은|그것도|이건)\\s');
+const KO_WH_SUBJECT_PATTERN = /(?:인지|는지|은지)(?:는|도)?\s/;
 const KO_PLACE = '(?:(?:제시된|현재|지금|이|그)\\s*)?(?:화면|자료|슬라이드|발화|기록|회의|발표|대화)(?:과\\s*발화|이나\\s*발화|나\\s*발화)?'
   + '(?:에|에는|에서|에서는|엔)';
 const KO_PLACE_ONLY_REFUSAL_PATTERN = new RegExp('^(?:' + KO_PLACE + '\\s*)?' + KO_VISUAL_REFUSAL + '$');
@@ -109,21 +114,30 @@ const EN_REFUSAL_PATTERN_LIST = [
 // 언급·명시·기록 여부는 주어와 상관없이 정보가 없다는 뜻이다("The amount is not mentioned in the record"). 주어가 짧을 때만 본다.
 const EN_META_REFUSAL_PATTERN = new RegExp('\\b' + EN_NOT_BE + '\\s+(?:mentioned|stated|specified|recorded)\\b');
 
-function isShortPrefix({ sentence, match }) {
-  const prefix = sentence.slice(0, match.index).trim();
-  return !prefix || prefix.split(/\s+/).length <= META_PREFIX_MAX_WORD_COUNT;
+function isShortKoPrefix({ sentence, match }) {
+  const wordList = sentence.slice(0, match.index).trim().split(/\s+/).filter(Boolean);
+  return wordList.filter((word) => !KO_PREFIX_FILLER_PATTERN.test(word)).length <= KO_PREFIX_MAX_WORD_COUNT;
+}
+
+function isShortEnPrefix({ sentence, match }) {
+  return sentence.slice(0, match.index).trim().split(/\s+/).filter(Boolean).length <= EN_PREFIX_MAX_WORD_COUNT;
 }
 
 function isRefusalSentence(sentence) {
   if (CONTENT_CLAUSE_PATTERN.test(sentence)) return false;
+  // 정보가 없다는 술어로 끝나면 앞말 길이만으로 정한다("수 없어요"가 보이는지 술어 "없어요"로 다시 걸리지 않게).
   const koMetaMatch = sentence.match(KO_META_REFUSAL_PATTERN);
-  if (koMetaMatch && isShortPrefix({ sentence, match: koMetaMatch })) return true;
+  if (koMetaMatch) return isShortKoPrefix({ sentence, match: koMetaMatch });
   if (KO_NOT_FOUND_CONTENT_PATTERN.test(sentence)) return true;
-  if (KO_VISUAL_REFUSAL_PATTERN.test(sentence)
-    && (KO_INFO_SUBJECT_PATTERN.test(sentence) || KO_PLACE_ONLY_REFUSAL_PATTERN.test(sentence))) return true;
-  const lowered = sentence.toLowerCase().replace(/[’‘]/g, "'").replace(/\b(that|it|this)'s\b/g, '$1 is');
+  const koVisualMatch = sentence.match(KO_VISUAL_REFUSAL_PATTERN);
+  if (koVisualMatch) {
+    if (KO_INFO_SUBJECT_PATTERN.test(sentence) || KO_PLACE_ONLY_REFUSAL_PATTERN.test(sentence)) return true;
+    // "누구인지는 나와 있지 않아요" 꼴은 앞에 사람 모습 같은 내용이 길게 오지 않을 때만 거절로 본다.
+    if (KO_WH_SUBJECT_PATTERN.test(sentence)) return isShortKoPrefix({ sentence, match: koVisualMatch });
+  }
+  const lowered = sentence.toLowerCase().replace(/\b(that|it|this)'s\b/g, '$1 is');
   const enMetaMatch = lowered.match(EN_META_REFUSAL_PATTERN);
-  if (enMetaMatch && isShortPrefix({ sentence: lowered, match: enMetaMatch })) return true;
+  if (enMetaMatch && isShortEnPrefix({ sentence: lowered, match: enMetaMatch })) return true;
   return EN_REFUSAL_PATTERN_LIST.some((pattern) => pattern.test(lowered));
 }
 
@@ -132,7 +146,8 @@ function isNotFoundAnswerText(text) {
   const trimmed = String(text ?? '').trim();
   if (!trimmed || DIGIT_PATTERN.test(trimmed) || QUOTED_ANSWER_PATTERN.test(trimmed)) return false;
   const sentenceList = trimmed.split(SENTENCE_SPLIT_PATTERN)
-    .map((sentence) => sentence.replace(SENTENCE_TRIM_PATTERN, '').replace(APOLOGY_PREFIX_PATTERN, '')).filter(Boolean);
+    .map((sentence) => sentence.replace(/[’‘]/g, "'").replace(SENTENCE_TRIM_PATTERN, '').replace(APOLOGY_PREFIX_PATTERN, ''))
+    .filter(Boolean);
   const contentList = sentenceList.filter((sentence) => !APOLOGY_SENTENCE_PATTERN.test(sentence));
   return contentList.length > 0 && contentList.every(isRefusalSentence);
 }

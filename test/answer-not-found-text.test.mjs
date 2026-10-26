@@ -27,6 +27,9 @@ test('거절 문장: 숫자 없이 답 전체가 못 찾았다고만 말하는 �
     '죄송하지만 그 정보는 화면에 나와 있지 않아요.', '죄송해요, 화면에서 찾을 수 없어요.', "Sorry, I couldn't find that.",
     "That's not mentioned.", "It's not shown on the slide.", 'The slide does not mention that.', '그건 화면에 안 나와요.',
     '화면에 안 보여요.', '잘 모르겠어요.', '화면과 발화에서 찾을 수 없어요.',
+    '현재 화면과 발화 기록에서는 해당 정보를 찾을 수 없습니다.', '주어진 화면과 발화만으로 알 수 없어요.', '여기서 확인할 수 없어요.',
+    '죄송하지만, 화면에서 찾을 수 없어요.', 'I’m sorry, I couldn’t find that.', "Sorry, but that's not shown.",
+    '그 사람의 이름은 알 수 없어요.',
   ];
   for (const text of refusalList) assert.equal(isNotFoundAnswerText(text), true, text);
 });
@@ -56,8 +59,16 @@ test('거절 문장: 못 찾았다는 말이 들어 있어도 내용이 있는 �
     '김 팀장님: 원인은 아직 확인할 수 없습니다.', '발표자는 "결과는 아직 알 수 없습니다."',
     'Kim said the penalty clause is not specified in the contract.', 'He said the deadline was not specified yet.',
     'The chart compares regional sales; exact values are not stated.', 'It was not visible because the slide changed quickly.',
+    // 사람 모습을 말한 뒤 누구인지·이름만 모른다고 한 답.
+    '정장을 입은 중년 남성이 누구인지는 알 수 없어요.', '사진 속 정장을 입은 남성이 누구인지는 알 수 없어요.',
+    '안경을 쓴 여성이 웃고 있는 사진 속 인물이 누구인지는 확인할 수 없어요.', '정장 차림의 중년 남성이 누구인지는 나와 있지 않아요.',
+    '사진 속 정장 차림의 남성이 누구인지는 화면에 나와 있지 않아요.', '빨간 넥타이 남성의 이름은 알 수 없어요.',
+    '단상에서 발표하는 남성의 이름은 알 수 없어요.', '안경 쓴 여성의 이름은 알 수 없어요.',
+    // 남의 말을 옮긴 답.
+    '팀장님 말로는 원인은 아직 알 수 없어요.', '팀장님에 따르면 원인은 알 수 없어요.', '발표자 설명으로는 원인은 아직 알 수 없어요.',
+    "김 팀장님은 '원인은 아직 확인할 수 없습니다.'",
     // 화면 글자를 따옴표로만 옮긴 답.
-    '"요청하신 페이지를 찾을 수 없습니다."',
+    '"요청하신 페이지를 찾을 수 없습니다."', "'요청하신 페이지를 찾을 수 없습니다.'", '‘요청하신 페이지를 찾을 수 없습니다.’',
   ];
   for (const text of answerList) assert.equal(isNotFoundAnswerText(text), false, text);
 });
