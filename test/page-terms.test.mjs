@@ -21,8 +21,8 @@ test('PPT 는 "슬라이드 N:", PPT 가 아닌 화면은 번호 없이 "페이�
   assert.equal(buildTransitionNarration({ isSlide: false, displayNumber: 3, narration: '연봉 제도를 설명한 PDF 문서' }), '페이지: 연봉 제도를 설명한 PDF 문서');
 });
 
-test('돌아온 화면도 PPT 가 아니면 "이전 페이지:" 라고 말한다', () => {
-  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: 2, topic: '김치의 종류' }), '이전 슬라이드 2: 김치의 종류');
+test('돌아온 화면은 PPT 든 아니든 "이전 페이지:" 라고 말한다', () => {
+  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: 2, topic: '김치의 종류' }), '이전 페이지: 김치의 종류');
   assert.equal(buildRevisitNarration({ isSlide: false, displayNumber: null, topic: '김치 블로그' }), '이전 페이지: 김치 블로그');
 });
 

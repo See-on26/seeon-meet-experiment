@@ -661,7 +661,7 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
 
       if (isRevisitFinal) {
         const revisitNarration = buildRevisitNarration({
-          isSlide: isSlideScreen, displayNumber, topic: result.pageTopic || result.narration, language: getCaptionLanguage(),
+          topic: result.pageTopic || result.narration, language: getCaptionLanguage(),
         });
         await appendRecord({
           kind: RECORD_KIND_MAP.pageTransition, ts, slideLabel, screenType: result.screenType,
