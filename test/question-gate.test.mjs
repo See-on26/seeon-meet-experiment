@@ -40,3 +40,10 @@ test('연결: 녹음 중에 일시정지하면 녹음을 버린다(일시정지 
   const pauseBody = readFunctionBody({ source: mainSource, start: 'function pauseExperiment(', end: '\n}' });
   assert.match(pauseBody, /micQuestionController\.cancel\(\)/);
 });
+
+test('연결: 녹음을 마친 뒤 일시정지했으면 받아쓰기 전에 막아 소리를 GPU 로 보내지 않는다', () => {
+  const audioBody = readFunctionBody({ source: mainSource, start: 'async function askQuestionFromAudio(', end: '\n}' });
+  const blockIndex = audioBody.indexOf('readQuestionBlockedTextKeyNow()');
+  assert.ok(blockIndex >= 0);
+  assert.ok(blockIndex < audioBody.indexOf('sendQuestionAudio('));
+});

@@ -1445,13 +1445,13 @@ function readUserCommandLabel(command) {
   return key ? t(key) : '';
 }
 
-// 프리셋 커맨드(command)와 자유 자연어 질문(questionText)을 함께 처리한다.
-// 자유 질문이면 최근 발화(recentTranscript)를 근거로 붙인다 — 심화 질의응답 경로.
 // 지금 질문을 받을 수 없으면 그 까닭의 문구 키(캡처 전·일시정지 중), 받을 수 있으면 null.
 function readQuestionBlockedTextKeyNow() {
   return readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused });
 }
 
+// 프리셋 커맨드(command)와 자유 자연어 질문(questionText)을 함께 처리한다.
+// 자유 질문이면 최근 발화(recentTranscript)를 근거로 붙인다 — 심화 질의응답 경로.
 async function askQuestion({ command = null, questionText = null, inputSource = 'typed', dedupeKey = command }) {
   if (dedupeKey && isDuplicateCommand({ dedupeKey })) return;
   const blockedTextKey = readQuestionBlockedTextKeyNow();
@@ -2590,6 +2590,12 @@ function askQuestionFromAudioWithinHold(event) {
 }
 
 async function askQuestionFromAudio({ buffer, startTs }) {
+  // 녹음을 마친 뒤 받아쓰기 전에 일시정지했으면 소리를 GPU 로 보내지 않는다.
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
+    return;
+  }
   announce(t('mic.listening'));
   const result = await window.seeon.sendQuestionAudio({ buffer, startTs }).catch(() => null);
   if (!result?.isOk) {
