@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { readPipelineConfig } = require('../src/main/caption-pipeline/config.js');
 const { createJudgeLlm, JUDGE_SOURCE_MAP } = require('../src/main/caption-pipeline/agents/shared/judge-llm.js');
 
 // 판단·해설·삽입 위치·질문 답·회의 요약 모두 자체 GPU 서버에서만 처리한다. 회의 화면·전사를 외부 AI API 로 보내는 경로를 두지 않는다.
-const repoRoot = new URL('..', import.meta.url).pathname;
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const EXTERNAL_AI_MARKER_LIST = [
   'bedrock-converse', 'bedrock-runtime', 'amazonaws.com', 'AWS_BEARER_TOKEN_BEDROCK',
   'api.openai.com', 'generativelanguage.googleapis.com', 'api.anthropic.com',

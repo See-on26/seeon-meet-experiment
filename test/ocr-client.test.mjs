@@ -120,7 +120,7 @@ test('4xx·형식 오류는 그 장만의 오류라 우회 창을 열지 않는�
 });
 
 test('근거 OCR 이 연 우회 창을 슬라이드 전사도 쓴다(같은 클라이언트)', async () => {
-  const vlmConfig = { ...config, vlmUrl: 'http://vlm', vlmModel: 'm', bedrockApiKey: '', slideTextBackend: 'ocr' };
+  const vlmConfig = { ...config, vlmUrl: 'http://vlm', vlmModel: 'm', slideTextBackend: 'ocr' };
   let ocrFetchCount = 0;
   globalThis.fetch = async (url) => {
     if (url === config.ocrUrl) { ocrFetchCount += 1; throw new Error('fetch failed'); }

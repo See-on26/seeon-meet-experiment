@@ -186,7 +186,7 @@ function createFakeJudgeLlm(answerByGroup) {
   };
 }
 
-const config = { judgeBackend: 'gpu' };
+const config = {};
 const lastUserText = (request) => request.messageList.at(-1).content[0].text;
 
 test('한 묶음 후보만 있으면 그 묶음 지시문으로 한 번만 묻는다', async () => {

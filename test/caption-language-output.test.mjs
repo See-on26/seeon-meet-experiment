@@ -290,7 +290,7 @@ test('영어 전환 파싱: 자료 명사 검사 없이 받고, 상한을 넘긴
   assert.equal(document.narration, 'Web page, District office complaint filing guide');
 });
 
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
