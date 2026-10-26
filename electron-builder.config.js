@@ -13,7 +13,7 @@ const BUILD_TUNNEL_KEY_KEY = 'SEEON_BUILD_TUNNEL_KEY';
 
 // 빌드 때 env 로 받아 설치본 resources 에 넣는 비밀 파일. 이름은 앱이 찾는 이름과 같아야 한다.
 const SECRET_RESOURCE_LIST = [
-  { envKey: BUILD_ENV_FILE_KEY, to: PACKAGED_ENV_FILE_NAME, missingNote: 'Bedrock 없이 규칙 기반으로 동작합니다' },
+  { envKey: BUILD_ENV_FILE_KEY, to: PACKAGED_ENV_FILE_NAME, missingNote: 'GPU 서버 접속 설정 없이 기본값으로 동작합니다' },
   { envKey: BUILD_TUNNEL_KEY_KEY, to: PACKAGED_KEY_FILE_NAME, missingNote: 'GPU 서버 터널을 직접 열지 못합니다' },
 ];
 

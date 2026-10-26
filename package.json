@@ -19,7 +19,6 @@
     "dist:win:kit": "node tools/windows-kit/build-windows-kit.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.32.0",
     "kiwi-nlp": "0.24.0",
     "ssh2": "^1.17.0"
   },

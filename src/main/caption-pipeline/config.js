@@ -36,9 +36,6 @@ const DEFAULT_GAP_SOURCE = 'asr';
 // 탐지 단계 LLM 판정 전용 서버. GPU 서버에서 VLM(8801)과 같은 모델(Gemma 4 26B-A4B)을 8805 에 따로 띄운다.
 const DEFAULT_JUDGE_GPU_URL = 'http://127.0.0.1:8805/v1/chat/completions';
 const DEFAULT_JUDGE_GPU_MODEL = 'gemma-4-26b-a4b-qat';
-const DEFAULT_BEDROCK_REGION = 'us-east-1';
-
-const DEFAULT_BEDROCK_MODEL_ID = 'anthropic.claude-sonnet-5';
 
 const DEFAULT_ROUTER_MODE = 'unified';
 
@@ -61,18 +58,6 @@ function readAsrLanguage({ env, envName }) {
   if (isAsrLanguage(language)) return language;
   console.warn(`[pipeline] ${envName}="${language}" 은 지원하지 않는 ASR 언어입니다 — ${DEFAULT_ASR_LANGUAGE} 로 전사합니다 (허용: ${ASR_LANGUAGE_LIST.join('·')})`);
   return DEFAULT_ASR_LANGUAGE;
-}
-
-// 탐지 단계 LLM 판정(통합 라우터·무발화·지시 판정)의 백엔드. gpu 는 GPU 서버 LLM 만 쓰고 실패해도 Bedrock 으로 넘기지 않는다, bedrock 은 Bedrock 만 쓴다.
-const JUDGE_BACKEND_LIST = ['gpu', 'bedrock'];
-const DEFAULT_JUDGE_BACKEND = 'gpu';
-
-function readJudgeBackend({ env }) {
-  const backend = env.SEEON_JUDGE_BACKEND;
-  if (backend === undefined || backend === '') return DEFAULT_JUDGE_BACKEND;
-  if (JUDGE_BACKEND_LIST.includes(backend)) return backend;
-  console.warn(`[pipeline] SEEON_JUDGE_BACKEND="${backend}" 은 지원하지 않는 판정 백엔드입니다 — ${DEFAULT_JUDGE_BACKEND} 로 판정합니다 (허용: ${JUDGE_BACKEND_LIST.join('·')})`);
-  return DEFAULT_JUDGE_BACKEND;
 }
 
 function readSlideTextBackend({ env }) {
@@ -252,8 +237,6 @@ function resolveOcrUrl({ env, embedUrl }) {
 }
 
 function readPipelineConfig(env = process.env) {
-  const bedrockModelId = env.SEEON_BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL_ID;
-  const judgeModelId = env.SEEON_BEDROCK_JUDGE_MODEL_ID || bedrockModelId;
   const vlmUrl = env.SEEON_VLM_URL || DEFAULT_VLM_URL;
   const vlmModel = env.SEEON_VLM_MODEL || DEFAULT_VLM_MODEL;
   const embedUrl = env.SEEON_EMBED_URL || DEFAULT_EMBED_URL;
@@ -280,13 +263,7 @@ function readPipelineConfig(env = process.env) {
     isSpeechRoiPointingPairEnabled: readOnOffSwitch({ env, envName: 'SEEON_SPEECH_ROI_POINTING_PAIR', defaultValue: DEFAULT_SPEECH_ROI_POINTING_PAIR }) === 'on',
     gapSource: readGapSource({ env }),
     ocrUrl: resolveOcrUrl({ env, embedUrl }),
-    bedrockRegion: env.SEEON_BEDROCK_REGION || DEFAULT_BEDROCK_REGION,
-    bedrockModelId,
-    bedrockApiKey: env.AWS_BEARER_TOKEN_BEDROCK || '',
-    judgeModelId,
-    // 판정 GPU LLM 은 VLM 과 같은 모델을 8805 에 따로 띄운 것이고 글만 보낸다. 실패해도 Bedrock 으로 넘기지 않는다.
-    // judgeModelId 는 판정 백엔드를 bedrock 으로 골랐을 때 쓴다. 삽입 위치 추론은 판정 백엔드와 상관없이 이 GPU LLM 을 쓴다.
-    judgeBackend: readJudgeBackend({ env }),
+    // 탐지 단계 판정·삽입 위치 추론은 VLM 과 같은 모델을 8805 에 따로 띄운 GPU 판정 LLM 에 글만 보낸다. 실패해도 다른 서비스로 넘기지 않는다.
     judgeGpuUrl: env.SEEON_JUDGE_GPU_URL || DEFAULT_JUDGE_GPU_URL,
     judgeGpuModel: env.SEEON_JUDGE_GPU_MODEL || DEFAULT_JUDGE_GPU_MODEL,
     isLiveSegmentSummaryEnabled: readOnOffSwitch({
@@ -306,15 +283,11 @@ function readPipelineConfig(env = process.env) {
     }),
     screenChangeKindList: readScreenChangeKindList({ env }),
     screenChangeImage: readScreenChangeImage({ env }),
-    hasBedrockCredentials:
-      Boolean(env.AWS_BEARER_TOKEN_BEDROCK)
-      || Boolean(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY)
-      || Boolean(env.AWS_PROFILE),
   };
 }
 
 module.exports = {
-  readPipelineConfig, DEFAULT_JUDGE_GPU_URL, DEFAULT_JUDGE_GPU_MODEL, ASR_LANGUAGE_LIST, DEFAULT_ASR_LANGUAGE, isAsrLanguage, JUDGE_BACKEND_LIST, DEFAULT_JUDGE_BACKEND,
+  readPipelineConfig, DEFAULT_JUDGE_GPU_URL, DEFAULT_JUDGE_GPU_MODEL, ASR_LANGUAGE_LIST, DEFAULT_ASR_LANGUAGE, isAsrLanguage,
   SLIDE_TEXT_BACKEND_LIST, DEFAULT_SLIDE_TEXT_BACKEND, resolveSlideTextBackend, GAP_SOURCE_LIST, DEFAULT_GAP_SOURCE,
   SCREEN_TEXT_GROUNDING_LIST, DEFAULT_SCREEN_TEXT_GROUNDING, FACT_CARD_AGENT_LIST, DEFAULT_FACT_CARD_AGENT_LIST,
   CHART_ESTIMATE_MODE_MAP, CHART_ESTIMATE_MODE_LIST, DEFAULT_CHART_ESTIMATE_MODE,

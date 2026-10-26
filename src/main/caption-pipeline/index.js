@@ -174,8 +174,7 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
     gate: silenceGate, judge: createSilenceJudge({ config }), getCaptionLanguage,
   });
   console.log(`[pipeline] 발화 축 판정 경로: ${config.routerMode}`);
-  console.log(`[pipeline] 탐지 판정 LLM: ${config.judgeBackend === 'gpu'
-    ? `GPU ${config.judgeGpuModel} (실패하면 판정 없이 넘어감)` : `Bedrock ${config.judgeModelId}`}`);
+  console.log(`[pipeline] 탐지 판정 LLM: GPU ${config.judgeGpuModel} (실패하면 판정 없이 넘어감)`);
   console.log(`[pipeline] ASR 언어: 회의 ${config.asrLanguage} · 질문 ${config.questionAsrLanguage}`);
 
   const contextFile = createContextFileWriter({ outDir: CONTEXT_DIR });

@@ -14,6 +14,10 @@ import { fileURLToPath } from 'node:url';
 
 // 개발 PC 에서만 맞는 값. 설치본에 들어가면 Windows 에 없는 맥 경로를 가리키거나 터널을 꺼 버린다.
 export const DEV_ONLY_ENV_KEY_LIST = ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL'];
+// 설치본 .env 에는 앱이 읽는 SEEON_ 설정만 넣는다. 앱은 외부 AI 서비스(Bedrock·OpenAI·Gemini 등)를 쓰지 않으므로
+// 개발 PC .env 에 그 키가 있어도 설치본에 넣지 않는다.
+const APP_ENV_KEY_PREFIX = 'SEEON_';
+const UNUSED_APP_ENV_KEY_PREFIX_LIST = ['SEEON_BEDROCK_'];
 const DEFAULT_REF = 'origin/production';
 // zip 안 이름은 ASCII 로 둔다. bsdtar zip 은 한글 이름에 UTF-8 표시를 하지 않아 Windows 탐색기에서 깨진다.
 const KIT_FOLDER_NAME = 'SEEON-Windows-kit';
@@ -49,8 +53,17 @@ function readEnvKey(line) {
   return match ? match[1] : null;
 }
 
+function isPackagedEnvKey(key) {
+  if (!key.startsWith(APP_ENV_KEY_PREFIX) || DEV_ONLY_ENV_KEY_LIST.includes(key)) return false;
+  return !UNUSED_APP_ENV_KEY_PREFIX_LIST.some((prefix) => key.startsWith(prefix));
+}
+
+// 주석·빈 줄은 그대로 두고, 값 줄은 설치본에 넣을 키만 남긴다.
 export function sanitizeEnvText(text) {
-  return text.split(/\r?\n/).filter((line) => !DEV_ONLY_ENV_KEY_LIST.includes(readEnvKey(line))).join('\n');
+  return text.split(/\r?\n/).filter((line) => {
+    const key = readEnvKey(line);
+    return key === null || isPackagedEnvKey(key);
+  }).join('\n');
 }
 
 export function readEnvValue(text, key) {
@@ -180,7 +193,7 @@ async function main() {
     if (!isWindows) fs.chmodSync(zipPath, 0o600);
     const sizeMb = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(1);
     console.log(`[kit] 완료 → ${zipPath} (${sizeMb}MB, 커밋 ${commit.slice(0, 7)})`);
-    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키와 Bedrock 토큰이 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
+    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키가 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
     // 빌드 결과물(dist)에도 비밀이 들어 있어 zip 을 만든 뒤 지운다.

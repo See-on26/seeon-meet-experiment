@@ -34,11 +34,12 @@ test('모르는 인자나 값 없는 인자는 멈춘다', () => {
   assert.throws(() => parseKitArgs(['--ref'], context), /값이 필요/);
 });
 
-test('설치본 .env 에는 개발 PC 전용 값(터널 키 경로·터널 끄기)을 빼고 나머지는 그대로 둔다', () => {
+test('설치본 .env 에는 앱이 읽는 SEEON_ 설정만 넣고, 외부 AI 서비스 키와 개발 PC 전용 값(터널 키 경로·터널 끄기)은 뺀다', () => {
   const text = [
-    '# 주석', 'AWS_BEARER_TOKEN_BEDROCK=abc', 'SEEON_GPU_SSH_KEY=/Users/me/key', 'export SEEON_GPU_TUNNEL=off', '', 'SEEON_ASR_LANGUAGE=ko',
+    '# 주석', 'AWS_BEARER_TOKEN_BEDROCK=abc', 'OPENAI_API_KEY=sk-1', 'GEMINI_API_KEY=g-1', 'SEEON_BEDROCK_REGION=us-east-1',
+    'SEEON_GPU_SSH_KEY=/Users/me/key', 'export SEEON_GPU_TUNNEL=off', '', 'SEEON_ASR_LANGUAGE=ko', 'export SEEON_GPU_SSH_HOST=gpu.example',
   ].join('\n');
-  assert.equal(sanitizeEnvText(text), ['# 주석', 'AWS_BEARER_TOKEN_BEDROCK=abc', '', 'SEEON_ASR_LANGUAGE=ko'].join('\n'));
+  assert.equal(sanitizeEnvText(text), ['# 주석', '', 'SEEON_ASR_LANGUAGE=ko', 'export SEEON_GPU_SSH_HOST=gpu.example'].join('\n'));
   assert.deepEqual(DEV_ONLY_ENV_KEY_LIST, ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL']);
 });
 
