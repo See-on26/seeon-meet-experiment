@@ -88,18 +88,6 @@ function registerIpc({ getViewerView }) {
     return file;
   });
 
-  ipcMain.handle('save-audio', async (_event, { name, buffer }) => {
-    const file = path.join(OUT_DIR, path.basename(name));
-    await fs.promises.writeFile(file, Buffer.from(buffer));
-    return file;
-  });
-
-  ipcMain.handle('save-video', async (_event, { name, buffer }) => {
-    const file = path.join(OUT_DIR, path.basename(name));
-    await fs.promises.writeFile(file, Buffer.from(buffer));
-    return file;
-  });
-
   ipcMain.handle('save-text', async (_event, { name, text }) => {
     const file = path.join(OUT_DIR, path.basename(name));
     await fs.promises.writeFile(file, String(text), 'utf8');

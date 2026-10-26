@@ -1004,12 +1004,13 @@ const SPEAKER_VOICE_IDLE_MS = 2000;
 let speakerPollTimer = null;
 let isSpeakerRequestInFlight = false;
 
+// 화자 확인에 찍을 참가자 타일 영역. 공유 화면 밖은 처리하지 않으므로, 타일 영역을 모르면 Meet 창 전체로 대신하지 않고 null 이다.
 function getParticipantRegionPx() {
   const liveVideo = captureSource.liveVideo;
   if (!liveVideo || !liveVideo.videoWidth) return null;
   const vw = liveVideo.videoWidth; const vh = liveVideo.videoHeight;
   const rect = roiStore.getParticipantRectNorm();
-  return rect ? normRectToPx(rect, vw, vh) : { x: 0, y: 0, w: vw, h: vh };
+  return rect ? normRectToPx(rect, vw, vh) : null;
 }
 
 function resolveDomSpeakerForPoll() {
@@ -1050,7 +1051,15 @@ async function pollSpeakerIdentity() {
     return;
   }
   const region = domVerdict.isDomResolved ? null : getParticipantRegionPx();
-  if (!domVerdict.isDomResolved && !region) return;
+  if (!domVerdict.isDomResolved && !region) {
+    markDebug({
+      stage: DEBUG_STAGE_MAP.speaker, verdict: DEBUG_VERDICT_MAP.skip,
+      narrationType: NARRATION_TYPE_MAP.speakerIdentity,
+      reason: '참가자 영역을 몰라 화자 확인을 건너뜀',
+      detail: 'DOM 으로 정하지 못했고 참가자 타일 좌표가 없다 — 공유 화면 밖 창 전체는 보내지 않는다',
+    });
+    return;
+  }
   let result = null;
   try {
     isSpeakerRequestInFlight = true;
