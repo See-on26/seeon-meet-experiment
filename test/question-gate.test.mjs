@@ -14,10 +14,29 @@ test('질문을 막는 까닭: 캡처 전이면 캡처 안내, 일시정지 중�
   assert.equal(UI_TEXT_MAP.en['question.paused'], "You can't ask questions while paused");
 });
 
+const mainSource = fs.readFileSync(new URL('../src/renderer/app/main.js', import.meta.url), 'utf8');
+
+function readFunctionBody({ source, start, end }) {
+  const startIndex = source.indexOf(start);
+  return source.slice(startIndex, source.indexOf(end, startIndex + start.length));
+}
+
 test('연결: 입력창·프리셋 질문과 음성 질문이 같은 판단으로 막는다', () => {
-  const source = fs.readFileSync(new URL('../src/renderer/app/main.js', import.meta.url), 'utf8');
-  const askStart = source.indexOf('async function askQuestion(');
-  const askBody = source.slice(askStart, source.indexOf('async function requestAnswer(', askStart));
-  assert.match(askBody, /readQuestionBlockedTextKey\(\{ isCapturing: captureSource\.isActive, isPaused: isExperimentPaused \}\)/);
-  assert.match(source, /readStartBlockedTextKey: \(\) => readQuestionBlockedTextKey\(\{ isCapturing: captureSource\.isActive, isPaused: isExperimentPaused \}\)/);
+  const nowBody = readFunctionBody({ source: mainSource, start: 'function readQuestionBlockedTextKeyNow(', end: '\n}' });
+  assert.match(nowBody, /readQuestionBlockedTextKey\(\{ isCapturing: captureSource\.isActive, isPaused: isExperimentPaused \}\)/);
+  const askBody = readFunctionBody({ source: mainSource, start: 'async function askQuestion(', end: 'async function requestAnswer(' });
+  assert.match(askBody, /readQuestionBlockedTextKeyNow\(\)/);
+  assert.match(mainSource, /readStartBlockedTextKey: readQuestionBlockedTextKeyNow,/);
+});
+
+test('연결: 막힌 입력창 질문은 적은 글을 지우지 않고 남겨 둔다', () => {
+  const submitBody = readFunctionBody({ source: mainSource, start: 'function submitTypedQuestion(', end: '\n}' });
+  const blockIndex = submitBody.indexOf('readQuestionBlockedTextKeyNow()');
+  assert.ok(blockIndex >= 0);
+  assert.ok(blockIndex < submitBody.indexOf("input.value = ''"));
+});
+
+test('연결: 녹음 중에 일시정지하면 녹음을 버린다(일시정지 중 질문을 GPU 로 보내지 않는다)', () => {
+  const pauseBody = readFunctionBody({ source: mainSource, start: 'function pauseExperiment(', end: '\n}' });
+  assert.match(pauseBody, /micQuestionController\.cancel\(\)/);
 });

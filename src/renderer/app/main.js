@@ -1447,9 +1447,14 @@ function readUserCommandLabel(command) {
 
 // 프리셋 커맨드(command)와 자유 자연어 질문(questionText)을 함께 처리한다.
 // 자유 질문이면 최근 발화(recentTranscript)를 근거로 붙인다 — 심화 질의응답 경로.
+// 지금 질문을 받을 수 없으면 그 까닭의 문구 키(캡처 전·일시정지 중), 받을 수 있으면 null.
+function readQuestionBlockedTextKeyNow() {
+  return readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused });
+}
+
 async function askQuestion({ command = null, questionText = null, inputSource = 'typed', dedupeKey = command }) {
   if (dedupeKey && isDuplicateCommand({ dedupeKey })) return;
-  const blockedTextKey = readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused });
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
   if (blockedTextKey) {
     announce(t(blockedTextKey));
     return;
@@ -2225,6 +2230,8 @@ function pauseExperiment() {
   asrSegmenter.stop();
   if (pointingSampleTimer) { clearInterval(pointingSampleTimer); pointingSampleTimer = null; }
   if (speakerPollTimer) { clearInterval(speakerPollTimer); speakerPollTimer = null; }
+  // 녹음 중인 질문은 버린다. 두면 일시정지 중에 받아쓰기·답을 GPU 로 보낸다.
+  micQuestionController.cancel();
   stopNarrationPlayer();
   setPauseUi(true);
   $('stCapture').textContent = t('status.paused');
@@ -2528,6 +2535,12 @@ function submitTypedQuestion() {
   const input = $('cmdInput');
   const text = input.value.trim();
   if (!text) return;
+  // 지금 받을 수 없는 질문이면 까닭만 알리고, 적은 글은 다시 보낼 수 있게 남겨 둔다.
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
+    return;
+  }
   input.value = '';
   askQuestion({ questionText: text });
 }
@@ -2597,7 +2610,7 @@ const questionRecorder = new QuestionRecorder({
 });
 micQuestionController = new MicQuestionController({
   recorder: questionRecorder,
-  readStartBlockedTextKey: () => readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused }),
+  readStartBlockedTextKey: readQuestionBlockedTextKeyNow,
   beginSession: beginMicQuestionSession,
   endSession: endMicQuestionSession,
   announce,
