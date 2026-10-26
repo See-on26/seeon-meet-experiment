@@ -1,8 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import {
-  parseKitArgs, sanitizeEnvText, readEnvValue, buildKitName, renderKitReadme, DEV_ONLY_ENV_KEY_LIST,
+  parseKitArgs, readEnvValue, buildKitName, renderKitReadme,
 } from '../tools/windows-kit/build-windows-kit.mjs';
+
+const require = createRequire(import.meta.url);
+const { sanitizeEnvText, countUnpackagedEnvLine, DEV_ONLY_ENV_KEY_LIST } = require('../tools/windows-kit/packaged-env.cjs');
 
 const context = { env: {}, homeDir: '/home/u', repoRoot: '/repo' };
 
@@ -34,12 +38,40 @@ test('모르는 인자나 값 없는 인자는 멈춘다', () => {
   assert.throws(() => parseKitArgs(['--ref'], context), /값이 필요/);
 });
 
-test('설치본 .env 에는 개발 PC 전용 값(터널 키 경로·터널 끄기)을 빼고 나머지는 그대로 둔다', () => {
+test('설치본 .env 에는 앱이 읽는 SEEON_ 설정 줄만 넣고, 주석·빈 줄·외부 AI 서비스 키·개발 PC 전용 값(터널 키 경로·터널 끄기)은 뺀다', () => {
   const text = [
-    '# 주석', 'AWS_BEARER_TOKEN_BEDROCK=abc', 'SEEON_GPU_SSH_KEY=/Users/me/key', 'export SEEON_GPU_TUNNEL=off', '', 'SEEON_ASR_LANGUAGE=ko',
-  ].join('\n');
-  assert.equal(sanitizeEnvText(text), ['# 주석', 'AWS_BEARER_TOKEN_BEDROCK=abc', '', 'SEEON_ASR_LANGUAGE=ko'].join('\n'));
+    '# 주석', '# GPU_SSH_PASSWORD=secret', '#OPENAI_API_KEY=sk-x', '  # SEEON_GPU_SSH_USER=me',
+    'AWS_BEARER_TOKEN_BEDROCK=abc', 'OPENAI_API_KEY=sk-1', 'GEMINI_API_KEY=g-1', 'SEEON_BEDROCK_REGION=us-east-1',
+    'SEEON_GPU_SSH_KEY=/Users/me/key', 'export SEEON_GPU_TUNNEL=off', '', 'SEEON_ASR_LANGUAGE=ko',
+    'export SEEON_GPU_SSH_HOST=gpu.example',
+  ].join('\r\n');
+  assert.equal(sanitizeEnvText(text), ['SEEON_ASR_LANGUAGE=ko', 'export SEEON_GPU_SSH_HOST=gpu.example'].join('\n'));
+  assert.equal(sanitizeEnvText('# 주석만\n\n'), '');
   assert.deepEqual(DEV_ONLY_ENV_KEY_LIST, ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL']);
+});
+
+test('설치본 .env: 값 뒤 주석은 앱이 읽는 방식대로 떼고, 같은 줄에서 닫히지 않는 여러 줄 값은 통째로 뺀다', () => {
+  const text = [
+    'SEEON_ASR_URL=http://h:1 # GPU_SSH_PASSWORD=secret', 'SEEON_VLM_MODEL=m#secret', 'SEEON_TTS_URL="http://t # 안" # 밖',
+    "SEEON_ASR_LANGUAGE='ko' # 밖", 'SEEON_VLM_PROMPT="첫 줄', '이어지는 줄"', 'SEEON_GPU_SSH_PORT=22',
+  ].join('\n');
+  assert.equal(sanitizeEnvText(text), [
+    'SEEON_ASR_URL=http://h:1', 'SEEON_VLM_MODEL=m', 'SEEON_TTS_URL="http://t # 안"', "SEEON_ASR_LANGUAGE='ko'",
+    'SEEON_GPU_SSH_PORT=22',
+  ].join('\n'));
+});
+
+test('설치본에 넣지 않는 줄 수를 센다(빈 줄은 세지 않는다) — 걸러 낸 글은 0 이다', () => {
+  const text = '# 주석\n\nSEEON_ASR_LANGUAGE=ko\nOPENAI_API_KEY=sk-1\nSEEON_GPU_SSH_KEY=/k\nSEEON_ASR_URL=http://h # 비밀\n';
+  assert.equal(countUnpackagedEnvLine(text), 4);
+  assert.equal(countUnpackagedEnvLine(sanitizeEnvText(text)), 0);
+  assert.equal(countUnpackagedEnvLine('SEEON_ASR_LANGUAGE=ko  \r\n'), 0);
+});
+
+test('설치본 .env: 줄 가운데 CR·줄 구분 문자가 있어도 멈추지 않고 앱이 읽는 대로 거른다', () => {
+  assert.equal(sanitizeEnvText('SEEON_ASR_URL=v\r\r\nSEEON_ASR_LANGUAGE=ko'), 'SEEON_ASR_URL=v\nSEEON_ASR_LANGUAGE=ko');
+  assert.equal(countUnpackagedEnvLine('SEEON_ASR_URL=v\r\r\n'), 0);
+  assert.doesNotThrow(() => sanitizeEnvText('SEEON_ASR_URL=a\u2028b'));
 });
 
 test('env 글에서 값 하나를 읽는다(따옴표·export 허용, 없으면 null)', () => {

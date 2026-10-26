@@ -17,10 +17,11 @@ const CANCEL_TEXT_KEY_MAP = {
 // 마이크 질문 한 번을 시작부터 마무리까지 한 줄로 세운다. 시작·마무리 중(Meet 마이크 확인 대기 등)에
 // 다시 누르면 무시해, 세션이 겹쳐 Meet 마이크 토글이 두 번 가거나 보류 게이트가 엉키지 않게 한다.
 export class MicQuestionController {
-  constructor({ recorder, canStart, beginSession, endSession, announce, setUi, onQuestionAudio,
+  // readStartBlockedTextKey 는 지금 질문을 받을 수 없으면 그 까닭의 문구 키(캡처 전·일시정지 중), 받을 수 있으면 null 이다.
+  constructor({ recorder, readStartBlockedTextKey, beginSession, endSession, announce, setUi, onQuestionAudio,
     onAnswerSettled = () => {}, t = defaultUiText }) {
     this.recorder = recorder;
-    this.canStart = canStart;
+    this.readStartBlockedTextKey = readStartBlockedTextKey;
     this.beginSession = beginSession;
     this.endSession = endSession;
     this.announce = announce;
@@ -38,8 +39,9 @@ export class MicQuestionController {
       this.recorder.toggle();
       return true;
     }
-    if (!this.canStart()) {
-      this.announce(this.t('question.notCapturing'));
+    const blockedTextKey = this.readStartBlockedTextKey();
+    if (blockedTextKey) {
+      this.announce(this.t(blockedTextKey));
       return false;
     }
     this.phase = MIC_PHASE_MAP.starting;

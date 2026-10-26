@@ -93,13 +93,13 @@ function mockVlm(content) {
 
 test('전사 에이전트: NONE 은 글자 없음', async () => {
   mockVlm('NONE');
-  const agent = createSlideTextAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' } });
+  const agent = createSlideTextAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm' } });
   assert.deepEqual(await agent.transcribe({ jpegBuffer }), { text: '', hasText: false, source: 'vlm', fallbackReason: null });
 });
 
 test('전사 에이전트: 코드펜스를 벗겨 낸다', async () => {
   mockVlm('```\n2분기 매출 | 120억 원\n```');
-  const agent = createSlideTextAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' } });
+  const agent = createSlideTextAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm' } });
   assert.deepEqual(await agent.transcribe({ jpegBuffer }), {
     text: '2분기 매출 | 120억 원', hasText: true, source: 'vlm', fallbackReason: null,
   });

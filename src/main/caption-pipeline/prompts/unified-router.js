@@ -8,7 +8,6 @@ const GAP_VERDICT_MAP = { gap: 'O', noGap: 'X' };
 const ROUTER_BLOCKED_REASON_MAP = {
   noCandidate: 'no_candidate',
   noGap: 'no_gap',
-  judgeUnavailable: 'judge_unavailable',
   judgeError: 'judge_error',
 };
 

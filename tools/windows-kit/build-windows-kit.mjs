@@ -11,9 +11,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// 설치본 .env 에는 앱이 읽는 SEEON_ 설정 줄만 넣는다(주석·다른 키·개발 PC 전용 값은 버린다).
+import { readEnvKey, sanitizeEnvText } from './packaged-env.cjs';
 
-// 개발 PC 에서만 맞는 값. 설치본에 들어가면 Windows 에 없는 맥 경로를 가리키거나 터널을 꺼 버린다.
-export const DEV_ONLY_ENV_KEY_LIST = ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL'];
 const DEFAULT_REF = 'origin/production';
 // zip 안 이름은 ASCII 로 둔다. bsdtar zip 은 한글 이름에 UTF-8 표시를 하지 않아 Windows 탐색기에서 깨진다.
 const KIT_FOLDER_NAME = 'SEEON-Windows-kit';
@@ -42,15 +42,6 @@ export function parseKitArgs(argList, { env, homeDir, repoRoot }) {
     index += 1;
   }
   return option;
-}
-
-function readEnvKey(line) {
-  const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-  return match ? match[1] : null;
-}
-
-export function sanitizeEnvText(text) {
-  return text.split(/\r?\n/).filter((line) => !DEV_ONLY_ENV_KEY_LIST.includes(readEnvKey(line))).join('\n');
 }
 
 export function readEnvValue(text, key) {
@@ -180,7 +171,7 @@ async function main() {
     if (!isWindows) fs.chmodSync(zipPath, 0o600);
     const sizeMb = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(1);
     console.log(`[kit] 완료 → ${zipPath} (${sizeMb}MB, 커밋 ${commit.slice(0, 7)})`);
-    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키와 Bedrock 토큰이 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
+    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키가 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
     // 빌드 결과물(dist)에도 비밀이 들어 있어 zip 을 만든 뒤 지운다.

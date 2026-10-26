@@ -37,7 +37,7 @@ function createFakeJudge(verdict) {
   };
 }
 
-const cueVerdict = { hasCue: true, reason: 'presenting', source: 'bedrock' };
+const cueVerdict = { hasCue: true, reason: 'presenting', source: 'gpu' };
 const input = { slideLabel: '3', transcript: '여러분, 이 사진을 한번 보시죠.', silenceMs: 5000 };
 
 test('단서가 있으면 묘사해 내보내고, 같은 슬라이드의 다음 무음은 막는다', async () => {
@@ -68,7 +68,7 @@ test('게이트가 막으면 판정기를 부르지 않는다', async () => {
 
 test('판정기가 차단하면 묘사하지 않고, 같은 슬라이드의 다음 무음을 허용한다', async () => {
   const gate = createSilenceNarrationGate();
-  const judge = createFakeJudge({ hasCue: false, reason: 'no_cue', source: 'bedrock' });
+  const judge = createFakeJudge({ hasCue: false, reason: 'no_cue', source: 'gpu' });
   const result = await createSilenceNarrator({ gate, judge }).run({
     ...input, describe: async () => assert.fail('묘사하면 안 된다'), emit: async () => assert.fail('내보내면 안 된다'),
   });

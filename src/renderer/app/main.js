@@ -44,6 +44,7 @@ import { NarrationAudioPrefetcher } from '../core/audio-renderer/narration-audio
 import { QuestionRecorder } from '../core/command/question-recorder.js';
 import { MeetMicGuard } from '../core/command/meet-mic-guard.js';
 import { MicQuestionController, MIC_PHASE_MAP } from '../core/command/mic-question-controller.js';
+import { readQuestionBlockedTextKey } from '../core/command/question-gate.js';
 import { CaptionNarrator } from '../core/audio-renderer/caption-narrator.js';
 import { NarrationMixer } from '../core/audio-renderer/narration-mixer.js';
 import { buildMeetReloadNotice } from '../core/ui/meet-reload-notice.js';
@@ -317,7 +318,7 @@ function startNarrationPlayer({ stream }) {
     narrationMixer.start(stream);
 
     captureSource.detachDirectAudio();
-    console.log('[mix] 실시간 믹싱 모드 — 회의음 우측 덕킹 / 내레이션 좌측');
+    console.log('[mix] 실시간 믹싱 모드 — 회의음 왼쪽 채널(해설 중 덕킹) / 해설·답 오른쪽 채널');
     return;
   }
 
@@ -1003,12 +1004,13 @@ const SPEAKER_VOICE_IDLE_MS = 2000;
 let speakerPollTimer = null;
 let isSpeakerRequestInFlight = false;
 
+// 화자 확인에 찍을 참가자 타일 영역. 공유 화면 밖은 처리하지 않으므로, 타일 영역을 모르면 Meet 창 전체로 대신하지 않고 null 이다.
 function getParticipantRegionPx() {
   const liveVideo = captureSource.liveVideo;
   if (!liveVideo || !liveVideo.videoWidth) return null;
   const vw = liveVideo.videoWidth; const vh = liveVideo.videoHeight;
   const rect = roiStore.getParticipantRectNorm();
-  return rect ? normRectToPx(rect, vw, vh) : { x: 0, y: 0, w: vw, h: vh };
+  return rect ? normRectToPx(rect, vw, vh) : null;
 }
 
 function resolveDomSpeakerForPoll() {
@@ -1049,7 +1051,15 @@ async function pollSpeakerIdentity() {
     return;
   }
   const region = domVerdict.isDomResolved ? null : getParticipantRegionPx();
-  if (!domVerdict.isDomResolved && !region) return;
+  if (!domVerdict.isDomResolved && !region) {
+    markDebug({
+      stage: DEBUG_STAGE_MAP.speaker, verdict: DEBUG_VERDICT_MAP.skip,
+      narrationType: NARRATION_TYPE_MAP.speakerIdentity,
+      reason: '참가자 영역을 몰라 화자 확인을 건너뜀',
+      detail: 'DOM 으로 정하지 못했고 참가자 타일 좌표가 없다 — 공유 화면 밖 창 전체는 보내지 않는다',
+    });
+    return;
+  }
   let result = null;
   try {
     isSpeakerRequestInFlight = true;
@@ -1435,12 +1445,18 @@ function readUserCommandLabel(command) {
   return key ? t(key) : '';
 }
 
+// 지금 질문을 받을 수 없으면 그 까닭의 문구 키(캡처 전·일시정지 중), 받을 수 있으면 null.
+function readQuestionBlockedTextKeyNow() {
+  return readQuestionBlockedTextKey({ isCapturing: captureSource.isActive, isPaused: isExperimentPaused });
+}
+
 // 프리셋 커맨드(command)와 자유 자연어 질문(questionText)을 함께 처리한다.
 // 자유 질문이면 최근 발화(recentTranscript)를 근거로 붙인다 — 심화 질의응답 경로.
 async function askQuestion({ command = null, questionText = null, inputSource = 'typed', dedupeKey = command }) {
   if (dedupeKey && isDuplicateCommand({ dedupeKey })) return;
-  if (!captureSource.isActive) {
-    announce(t('question.notCapturing'));
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
     return;
   }
   appendAskBubble({ text: questionText || readUserCommandLabel(command) || command });
@@ -2214,6 +2230,8 @@ function pauseExperiment() {
   asrSegmenter.stop();
   if (pointingSampleTimer) { clearInterval(pointingSampleTimer); pointingSampleTimer = null; }
   if (speakerPollTimer) { clearInterval(speakerPollTimer); speakerPollTimer = null; }
+  // 녹음 중인 질문은 버린다. 두면 일시정지 중에 받아쓰기·답을 GPU 로 보낸다.
+  micQuestionController.cancel();
   stopNarrationPlayer();
   setPauseUi(true);
   $('stCapture').textContent = t('status.paused');
@@ -2517,6 +2535,12 @@ function submitTypedQuestion() {
   const input = $('cmdInput');
   const text = input.value.trim();
   if (!text) return;
+  // 지금 받을 수 없는 질문이면 까닭만 알리고, 적은 글은 다시 보낼 수 있게 남겨 둔다.
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
+    return;
+  }
   input.value = '';
   askQuestion({ questionText: text });
 }
@@ -2566,6 +2590,12 @@ function askQuestionFromAudioWithinHold(event) {
 }
 
 async function askQuestionFromAudio({ buffer, startTs }) {
+  // 녹음을 마친 뒤 받아쓰기 전에 일시정지했으면 소리를 GPU 로 보내지 않는다.
+  const blockedTextKey = readQuestionBlockedTextKeyNow();
+  if (blockedTextKey) {
+    announce(t(blockedTextKey));
+    return;
+  }
   announce(t('mic.listening'));
   const result = await window.seeon.sendQuestionAudio({ buffer, startTs }).catch(() => null);
   if (!result?.isOk) {
@@ -2586,7 +2616,7 @@ const questionRecorder = new QuestionRecorder({
 });
 micQuestionController = new MicQuestionController({
   recorder: questionRecorder,
-  canStart: () => captureSource.isActive,
+  readStartBlockedTextKey: readQuestionBlockedTextKeyNow,
   beginSession: beginMicQuestionSession,
   endSession: endMicQuestionSession,
   announce,

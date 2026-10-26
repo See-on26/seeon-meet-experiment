@@ -147,7 +147,7 @@ async function createJudge() {
   const { createUnifiedRouter } = require('../../src/main/caption-pipeline/router/unified-router.js');
   const { createSilenceJudge } = require('../../src/main/caption-pipeline/router/silence-judge.js');
   const config = readPipelineConfig();
-  console.log(`[eval] 판단 LLM: ${config.judgeBackend} · GPU ${config.judgeGpuModel} (${config.judgeGpuUrl})`);
+  console.log(`[eval] 판단 LLM: GPU ${config.judgeGpuModel} (${config.judgeGpuUrl})`);
   return { router: createUnifiedRouter({ config }), silenceJudge: createSilenceJudge({ config }) };
 }
 

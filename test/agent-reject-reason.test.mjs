@@ -66,7 +66,7 @@ test('기록·흐름 창에 쓸 거절 설명: 이유가 있으면 그 이유, �
   assert.equal(describeAgentRejection({}).reason, 'NONE — 이유를 적지 않음');
 });
 
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 let requestBodyList = [];
 afterEach(() => { globalThis.fetch = originalFetch; requestBodyList = []; });

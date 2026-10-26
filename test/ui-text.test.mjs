@@ -391,7 +391,7 @@ test('마이크 질문 안내를 영어로도 읽는다', async () => {
   const log = [];
   const controller = new MicQuestionController({
     recorder: { start: async () => false, toggle() {}, cancel() {} },
-    canStart: () => false,
+    readStartBlockedTextKey: () => 'question.notCapturing',
     beginSession: async () => {}, endSession: async () => {},
     announce: (text) => log.push(text), setUi: () => {}, onQuestionAudio: async () => {},
     t: tEn,

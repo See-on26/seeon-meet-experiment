@@ -149,7 +149,7 @@ test('지시 프롬프트·에이전트는 OCR 줄을 받지 않는다', async (
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"seen":"제주 지역","caption":"제주 지역"}' } }] }) };
   };
   try {
-    await createDeixisResolutionAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' } }).generate({
+    await createDeixisResolutionAgent({ config: { vlmUrl: 'http://x', vlmModel: 'm' } }).generate({
       jpegBuffer: Buffer.from('x'), utterance: '여기 이 지역도 시범사업 들어가 있습니다', subKind: 'simple', screenLineList,
     });
   } finally {

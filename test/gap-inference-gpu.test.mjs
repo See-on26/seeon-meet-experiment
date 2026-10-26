@@ -140,9 +140,9 @@ test('사고는 품질 모드에만 켜고 시간도 그 모드 지연 안에서
   assert.ok(delayed.timeoutMs < 10000);
 });
 
-test('Bedrock 키가 없어도 GPU 로 삽입 위치를 고른다', async () => {
+test('균형 모드는 GPU 를 한 번만 불러 삽입 위치를 고른다', async () => {
   const { fetchImpl, callList } = createFakeFetch();
-  const agent = createGapInferenceAgent({ config: { ...config, bedrockApiKey: '' }, fetchImpl });
+  const agent = createGapInferenceAgent({ config, fetchImpl });
   const result = await agent.infer({ ...request, mode: 'delayed' });
 
   assert.equal(callList.length, 1);

@@ -7,12 +7,6 @@ contextBridge.exposeInMainWorld('seeon', {
   openPrivacySettings(pane) {
     ipcRenderer.send('open-privacy-settings', pane);
   },
-  saveAudio({ name, buffer }) {
-    return ipcRenderer.invoke('save-audio', { name, buffer: new Uint8Array(buffer) });
-  },
-  saveVideo({ name, buffer }) {
-    return ipcRenderer.invoke('save-video', { name, buffer: new Uint8Array(buffer) });
-  },
   saveFrame({ name, buffer }) {
     return ipcRenderer.invoke('save-frame', { name, buffer: new Uint8Array(buffer) });
   },

@@ -9,7 +9,7 @@ const {
 const { OcrRequestError, createOcrClient } = require('../src/main/caption-pipeline/agents/shared/ocr-client.js');
 
 const jpegBuffer = Buffer.from('x');
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 let vlmCallCount = 0;
 
