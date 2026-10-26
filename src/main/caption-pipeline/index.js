@@ -85,7 +85,7 @@ const { classifyQuestion, QUESTION_ROUTE_MAP } = require('./context/question-cla
 const { createQuestionRouter } = require('./context/question-router');
 const { formatQaHistory, buildPresetQa } = require('./context/qa-history');
 const { buildCurrentScreenContextText } = require('./context/current-screen-context');
-const { createQuestionAnswerer, readAnswerText, ANSWER_TEXT_KEY_MAP } = require('./context/question-answerer');
+const { createQuestionAnswerer, resolveAnswerText } = require('./context/question-answerer');
 const { OUT_DIR, CONTEXT_DIR, CHART_FRAMES_DIR } = require('../paths');
 
 const ASR_DRAIN_TIMEOUT_MS = 8000;
@@ -1429,19 +1429,19 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
     const subKind = command || 'free_question';
     console.log(`[pipeline] ▶ 사용자 ${command ? `커맨드 ${command}` : `질문 "${truncateForLog(questionText)}"`} ts=${ts}`);
     try {
-      const { text, isGrounded } = await agentFieldMap[NARRATION_TYPE_MAP.userCommand].generate({
+      const generated = await agentFieldMap[NARRATION_TYPE_MAP.userCommand].generate({
         jpegBuffer: Buffer.from(buffer), command, questionText, recentTranscript,
         minWordCount: wordBudget?.minWordCount, maxWordCount: wordBudget?.maxWordCount,
+      });
+      // 근거가 없으면 아무 말 없이 끝내지 않고 "화면과 발화에 없는 내용이에요" 로 답한다.
+      const { text, isGrounded } = resolveAnswerText({
+        text: generated.text, isGrounded: generated.isGrounded, language: getCaptionLanguage(),
       });
       await appendRecord({
         kind: RECORD_KIND_MAP.deixis, ts, utterance: questionText || '', caption: text, isGrounded,
         narrationType: NARRATION_TYPE_MAP.userCommand, subKind,
       });
-      if (!isGrounded || !text) {
-        console.log(`[pipeline] 응답 없음 (${Date.now() - startedAt}ms) ${subKind}`);
-        return { isOk: true, isGrounded: false };
-      }
-      console.log(`[pipeline] 응답 (${Date.now() - startedAt}ms) ${subKind} → "${truncateForLog(text)}"`);
+      console.log(`[pipeline] ${isGrounded ? '응답' : '근거 없음 — 고정 문구'} (${Date.now() - startedAt}ms) ${subKind} → "${truncateForLog(text)}"`);
       // 프리셋 답도 다음 질문의 '앞서 오간 질문과 답'에 들어가게 쌓는다.
       if (command) {
         contextStore.addQa(buildPresetQa({
@@ -1449,9 +1449,9 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
         }));
       }
       markDebug({
-        stage: DEBUG_STAGE_MAP.vlm, verdict: DEBUG_VERDICT_MAP.pass, ts,
+        stage: DEBUG_STAGE_MAP.vlm, verdict: isGrounded ? DEBUG_VERDICT_MAP.pass : DEBUG_VERDICT_MAP.info, ts,
         narrationType: NARRATION_TYPE_MAP.userCommand,
-        reason: `${command ? `커맨드 ${command}` : '자유 질문'} 응답`, detail: `"${text}"`,
+        reason: `${command ? `커맨드 ${command}` : '자유 질문'} ${isGrounded ? '응답' : '근거 없음'}`, detail: `"${text}"`,
       });
 
       await sendCaption({
@@ -1462,7 +1462,7 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
           summary: command ? '사용자가 단축키로 직접 요청한 답변' : '사용자가 직접 물은 자유 질문',
         },
       });
-      return { isOk: true, isGrounded: true };
+      return { isOk: true, isGrounded };
     } catch (error) {
       console.error(`[pipeline] ✖ 커맨드 실패 ts=${ts}: ${error.message}`);
       await appendErrorRecordSafely({
@@ -1508,14 +1508,15 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
           route: routed.route, slideMajorList: routed.slideMajorList, questionText, wordBudget, speakerHintNow,
           heardWallTs, heardVideoTimeMs,
         });
-      const text = result.isGrounded && result.text
-        ? result.text : readAnswerText({ key: ANSWER_TEXT_KEY_MAP.notFound, language: getCaptionLanguage() });
+      const { text, isGrounded } = resolveAnswerText({
+        text: result.text, isGrounded: result.isGrounded, language: getCaptionLanguage(),
+      });
       contextStore.addQa({
         ts, question: questionText, answer: text, route: routed.route, slideMajorList: routed.slideMajorList,
       });
       await appendRecord({
         kind: RECORD_KIND_MAP.deixis, ts, utterance: questionText, caption: text,
-        isGrounded: Boolean(result.isGrounded), narrationType: NARRATION_TYPE_MAP.userCommand,
+        isGrounded, narrationType: NARRATION_TYPE_MAP.userCommand,
         subKind: `question:${routed.route}`,
       });
       console.log(`[pipeline] 질문 답 (${Date.now() - startedAt}ms) [${routed.route}] "${truncateForLog(questionText)}" → "${truncateForLog(text)}"`);
@@ -1524,7 +1525,7 @@ function registerPipeline({ getViewerView, meetingArchive = null }) {
         narrationClass: NARRATION_CLASS_MAP.userCommand, eventVideoTimeMs,
         rationale: { subKind: `question:${routed.route}`, summary: '사용자가 직접 물은 질문' },
       });
-      return { isOk: true, isGrounded: Boolean(result.isGrounded), route: routed.route };
+      return { isOk: true, isGrounded, route: routed.route };
     } catch (error) {
       console.error(`[pipeline] ✖ 질문 처리 실패 ts=${ts}: ${error.message}`);
       markDebug({

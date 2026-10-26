@@ -49,14 +49,22 @@ const NARRATION_REPLAY_LIMIT = 10;
 const FLOW_UTTERANCE_PER_SLIDE = 3;
 const FLOW_UTTERANCE_MAX_CHARS = 80;
 
-// 모델이 토큰 대신 "기록에 명시되어 있지 않습니다" 같은 설명으로 못 찾았다고 답하는 경우.
+// 모델이 토큰 대신 "기록에 명시되어 있지 않습니다"·"화면에 나와 있지 않습니다" 같은 설명으로 못 찾았다고 답하는 경우.
 // 숫자가 든 답("날짜는 알 수 없지만 500만원…")은 답이 있는 것으로 본다.
 // 영어 답이면 "not mentioned"·"cannot find" 같은 거절 문장을 대소문자 없이 본다.
 const NOT_FOUND_PHRASE_PATTERN = new RegExp([
   '명시되어 있지 않', '나와 있지 않', '알 수 없', '확인할 수 없', '찾을 수 없', '기록에 없', '기록에는 없',
+  '나오지 않', '보이지 않', '포함되어 있지 않', '표시되어 있지 않', '언급되지 않', '언급이 없', '정보가 없', '정보는 없',
   'not mentioned', 'not found', 'no information', 'cannot find', "can't find", 'can not find', 'not shown',
-  'not stated', 'not specified', 'not in the record',
+  'not stated', 'not specified', 'not in the record', 'not on the screen', 'not visible', 'does not show', "doesn't show",
 ].join('|'), 'i');
+const DIGIT_PATTERN = /\d/;
+
+// 숫자 없이 못 찾았다고만 말하는 답인가. 이런 답은 근거 없음으로 보고 고정 문구로 바꾼다.
+function isNotFoundAnswerText(text) {
+  const trimmed = String(text ?? '').trim();
+  return NOT_FOUND_PHRASE_PATTERN.test(trimmed) && !DIGIT_PATTERN.test(trimmed);
+}
 const TOKEN_WRAPPER_PATTERN = /^[\s"'`*「『“]+/;
 
 // 교차 모드는 사용자가 회의를 늦게 듣는다. 이만큼 늦으면 '지금 화자'를 실시간 화면이 아니라 들은 시점 발화로 정한다.
@@ -67,11 +75,19 @@ function toAnswer({ content, wordBudget, language = DEFAULT_CAPTION_LANGUAGE }) 
   const { text, isGrounded } = parseGroundingText(
     content, computeMaxChars({ maxWordCount: wordBudget.maxWordCount, language }), wordBudget.maxWordCount, language,
   );
-  return isGrounded ? { text, isGrounded: true, isImageUsed: false } : notFound({ language });
+  return isGrounded && !isNotFoundAnswerText(text) ? { text, isGrounded: true, isImageUsed: false } : notFound({ language });
 }
 
 function notFound({ language = DEFAULT_CAPTION_LANGUAGE } = {}) {
   return { text: readAnswerText({ key: ANSWER_TEXT_KEY_MAP.notFound, language }), isGrounded: false, isImageUsed: false };
+}
+
+// 사용자에게 들려줄 질문 답. 근거가 없거나(NONE·빈 답) 모델이 거절 문장으로 답했으면 고정 문구
+// "화면과 발화에 없는 내용이에요"(영어 캡션이면 영어 문구)로 답한다. 앱이 정한 다른 고정 문구는 그대로 둔다.
+function resolveAnswerText({ text, isGrounded, language = DEFAULT_CAPTION_LANGUAGE }) {
+  const isAnswer = Boolean(isGrounded) && Boolean(text) && !isNotFoundAnswerText(text);
+  if (isAnswer) return { text, isGrounded: true };
+  return { text: readAnswerText({ key: ANSWER_TEXT_KEY_MAP.notFound, language }), isGrounded: false };
 }
 
 // getCaptionLanguage 는 이번 세션의 캡션 언어다. 답 프롬프트·고정 문구가 이 언어를 따른다.
@@ -111,8 +127,7 @@ function createQuestionAnswerer({ requestText, requestImage, readImage, contextS
     const trimmed = String(content ?? '').trim().replace(TOKEN_WRAPPER_PATTERN, '');
     // 모델이 "기록에 없습니다. NEED_IMAGE"처럼 설명 뒤에 토큰을 붙이기도 한다. 어디에 있든 이미지 재조회로 본다.
     const isImageRequested = trimmed.includes(NEED_IMAGE_TOKEN);
-    const isNotFound = new RegExp(`^${GROUNDING_NONE_TOKEN}\\b`, 'i').test(trimmed)
-      || (NOT_FOUND_PHRASE_PATTERN.test(trimmed) && !/\d/.test(trimmed));
+    const isNotFound = new RegExp(`^${GROUNDING_NONE_TOKEN}\\b`, 'i').test(trimmed) || isNotFoundAnswerText(trimmed);
     if (!isImageRequested && !isNotFound) return toAnswer({ content, wordBudget, language });
     const imagePath = slideList[0].imagePath;
     const jpegBuffer = imagePath ? await readImage(imagePath) : null;
@@ -227,4 +242,5 @@ function createQuestionAnswerer({ requestText, requestImage, readImage, contextS
 module.exports = {
   createQuestionAnswerer, NOT_FOUND_TEXT, NO_IMAGE_TEXT, SPEAKER_UNKNOWN_TEXT, OFF_TOPIC_TEXT,
   ANSWER_TEXT_KEY_MAP, readAnswerText, buildSpeakerNowText, NOT_FOUND_PHRASE_PATTERN,
+  isNotFoundAnswerText, resolveAnswerText,
 };
