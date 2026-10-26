@@ -5,6 +5,7 @@ const { PACKAGED_KEY_FILE_NAME } = require('./src/main/gpu-tunnel/tunnel-config'
 const {
   KIWI_MODEL_FILE_LIST, PACKAGED_KIWI_MODEL_DIR_NAME, DEV_KIWI_MODEL_DIR,
 } = require('./src/main/caption-pipeline/trigger/kiwi-model');
+const { countUnpackagedEnvLine } = require('./tools/windows-kit/packaged-env.cjs');
 
 const PRODUCT_NAME = 'SEEON';
 
@@ -13,7 +14,7 @@ const BUILD_TUNNEL_KEY_KEY = 'SEEON_BUILD_TUNNEL_KEY';
 
 // 빌드 때 env 로 받아 설치본 resources 에 넣는 비밀 파일. 이름은 앱이 찾는 이름과 같아야 한다.
 const SECRET_RESOURCE_LIST = [
-  { envKey: BUILD_ENV_FILE_KEY, to: PACKAGED_ENV_FILE_NAME, missingNote: 'GPU 서버 접속 설정 없이 기본값으로 동작합니다' },
+  { envKey: BUILD_ENV_FILE_KEY, to: PACKAGED_ENV_FILE_NAME, missingNote: 'GPU 서버 접속 설정 없이 기본값으로 동작합니다', isEnvFile: true },
   { envKey: BUILD_TUNNEL_KEY_KEY, to: PACKAGED_KEY_FILE_NAME, missingNote: 'GPU 서버 터널을 직접 열지 못합니다' },
 ];
 
@@ -37,23 +38,35 @@ function buildKiwiModelResource({ fileExists, modelDir = DEV_KIWI_MODEL_DIR }) {
   return { from: modelDir, to: PACKAGED_KIWI_MODEL_DIR_NAME, filter: KIWI_MODEL_FILE_LIST };
 }
 
+// .env 는 앱이 읽는 SEEON_ 설정 줄만 담겨 있어야 넣는다. 주석·다른 키 줄이 있으면 개발 PC .env 를 그대로 넘긴 것이라
+// (주석에 적어 둔 접속 정보까지 들어간다) 만들지 않고 멈춘다. 키트(npm run dist:win:kit)는 걸러 낸 파일을 넘긴다.
+function assertPackagedEnvFile({ envKey, text }) {
+  const lineCount = countUnpackagedEnvLine(text);
+  if (lineCount) {
+    throw new Error(`[dist] ${envKey} 파일에 설치본에 넣지 않는 줄(주석·다른 키)이 ${lineCount}줄 있습니다`
+      + ' — npm run dist:win:kit 으로 만들거나 SEEON_ 설정 줄만 남긴 파일을 쓰세요');
+  }
+}
+
 // 비밀 파일 내용과 경로는 로그에 남기지 않는다. env 를 적었는데 파일이 없으면 비밀 빠진 설치 파일을 만들지 않고 멈춘다.
-function buildSecretResourceList({ env, fileExists, warn }) {
+function buildSecretResourceList({ env, fileExists, readFile, warn }) {
   const resourceList = [];
-  for (const { envKey, to, missingNote } of SECRET_RESOURCE_LIST) {
+  for (const { envKey, to, missingNote, isEnvFile } of SECRET_RESOURCE_LIST) {
     if (!env[envKey]) {
       warn(`[dist] ${envKey} 가 비어 있어 ${to} 없이 만듭니다 — 설치본은 ${missingNote}`);
       continue;
     }
     const sourcePath = path.resolve(env[envKey]);
     if (!fileExists(sourcePath)) throw new Error(`[dist] ${envKey} 에 적은 파일을 찾지 못했습니다`);
+    if (isEnvFile) assertPackagedEnvFile({ envKey, text: readFile(sourcePath, 'utf8') });
     resourceList.push({ from: sourcePath, to });
   }
   return resourceList;
 }
 
 function createBuilderConfig({
-  env = process.env, fileExists = fs.existsSync, warn = console.warn, kiwiModelDir = DEV_KIWI_MODEL_DIR,
+  env = process.env, fileExists = fs.existsSync, readFile = fs.readFileSync, warn = console.warn,
+  kiwiModelDir = DEV_KIWI_MODEL_DIR,
 } = {}) {
   return {
     appId: 'kr.seeon.meet',
@@ -67,7 +80,7 @@ function createBuilderConfig({
     // Kiwi wasm 은 asar 밖에 풀어 두고 읽는다(src/main/caption-pipeline/trigger/kiwi-tokenizer.js).
     asarUnpack: ['node_modules/kiwi-nlp/dist/*.wasm'],
     extraResources: [
-      ...buildSecretResourceList({ env, fileExists, warn }),
+      ...buildSecretResourceList({ env, fileExists, readFile, warn }),
       buildKiwiModelResource({ fileExists, modelDir: kiwiModelDir }),
     ],
     win: {

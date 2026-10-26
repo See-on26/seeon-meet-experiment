@@ -11,13 +11,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// 설치본 .env 에는 앱이 읽는 SEEON_ 설정 줄만 넣는다(주석·다른 키·개발 PC 전용 값은 버린다).
+import { readEnvKey, sanitizeEnvText } from './packaged-env.cjs';
 
-// 개발 PC 에서만 맞는 값. 설치본에 들어가면 Windows 에 없는 맥 경로를 가리키거나 터널을 꺼 버린다.
-export const DEV_ONLY_ENV_KEY_LIST = ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL'];
-// 설치본 .env 에는 앱이 읽는 SEEON_ 설정만 넣는다. 앱은 외부 AI 서비스(Bedrock·OpenAI·Gemini 등)를 쓰지 않으므로
-// 개발 PC .env 에 그 키가 있어도 설치본에 넣지 않는다.
-const APP_ENV_KEY_PREFIX = 'SEEON_';
-const UNUSED_APP_ENV_KEY_PREFIX_LIST = ['SEEON_BEDROCK_'];
 const DEFAULT_REF = 'origin/production';
 // zip 안 이름은 ASCII 로 둔다. bsdtar zip 은 한글 이름에 UTF-8 표시를 하지 않아 Windows 탐색기에서 깨진다.
 const KIT_FOLDER_NAME = 'SEEON-Windows-kit';
@@ -46,24 +42,6 @@ export function parseKitArgs(argList, { env, homeDir, repoRoot }) {
     index += 1;
   }
   return option;
-}
-
-function readEnvKey(line) {
-  const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-  return match ? match[1] : null;
-}
-
-function isPackagedEnvKey(key) {
-  if (!key.startsWith(APP_ENV_KEY_PREFIX) || DEV_ONLY_ENV_KEY_LIST.includes(key)) return false;
-  return !UNUSED_APP_ENV_KEY_PREFIX_LIST.some((prefix) => key.startsWith(prefix));
-}
-
-// 주석·빈 줄은 그대로 두고, 값 줄은 설치본에 넣을 키만 남긴다.
-export function sanitizeEnvText(text) {
-  return text.split(/\r?\n/).filter((line) => {
-    const key = readEnvKey(line);
-    return key === null || isPackagedEnvKey(key);
-  }).join('\n');
 }
 
 export function readEnvValue(text, key) {

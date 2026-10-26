@@ -84,6 +84,7 @@ npm run dist:mac:dir    # 맥에서 설치본 동작만 확인할 때 — dist/m
 
 - Windows 결과는 `dist/SEEON-Setup-<버전>.exe` (약 100MB)예요. `dist/win-unpacked/` 는 설치 전 내용물이에요.
 - 설치본은 작업 파일을 `%APPDATA%\SEEON\out` 에, 회의 기록은 `문서\SEEON 회의 기록` 에 남겨요.
+- GPU 서버 설정과 터널 키를 넣은 설치본은 `npm run dist:win:kit` 으로 만들어요. 설치본 `.env` 에는 개발 PC `.env` 의 `SEEON_` 설정 줄만 들어가고 주석·다른 키는 빠져요. `SEEON_BUILD_ENV_FILE` 로 직접 넘긴 파일에 그런 줄이 있으면 빌드가 멈춰요.
 
 ---
 
