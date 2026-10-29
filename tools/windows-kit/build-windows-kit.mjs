@@ -194,7 +194,7 @@ async function main() {
     if (!isWindows) fs.chmodSync(zipPath, 0o600);
     const sizeMb = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(1);
     console.log(`[kit] 완료 → ${zipPath} (${sizeMb}MB, 커밋 ${commit.slice(0, 7)})`);
-    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키와 Bedrock 토큰이 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
+    console.log('[kit] 주의: 설치 파일 안에 GPU 서버 접속 키가 들어 있다. 팀원에게 1:1 로만 전달하고 공개 업로드하지 않는다.');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
     // 빌드 결과물(dist)에도 비밀이 들어 있어 zip 을 만든 뒤 지운다.
