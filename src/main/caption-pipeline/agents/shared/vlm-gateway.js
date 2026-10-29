@@ -49,7 +49,7 @@ function pickAnswerText({ message, label, vlmModel }) {
   return reasoning ?? content;
 }
 
-// 화면 이해는 GPU 서버 VLM 만 쓴다. 실패하면 Claude(Bedrock)로 넘기지 않고 오류를 그대로 던져 그 해설을 내지 않는다.
+// 화면 이해는 GPU 서버 VLM 만 쓴다. 실패하면 다른 서비스로 넘기지 않고 오류를 그대로 던져 그 해설을 내지 않는다.
 // 배경 순위 요청은 실시간 해설 요청이 없을 때까지 기다린 뒤 보내고, 시간 제한은 보낼 때부터 잰다.
 // finishReason 은 답이 maxTokens 에서 잘렸는지('length') 알려 준다.
 async function requestVlmCompletion({ config, jpegBuffer, jpegBufferList, prompt, label,

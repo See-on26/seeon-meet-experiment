@@ -30,11 +30,13 @@ function makeWarnRecorder() {
   return { messageList, warn: (message) => messageList.push(message) };
 }
 
-function buildWith({ env, existingPathList = [ENV_FILE_PATH, TUNNEL_KEY_PATH] }) {
+const PACKAGED_ENV_TEXT = 'SEEON_ASR_LANGUAGE=ko\nSEEON_GPU_SSH_HOST=gpu.example\n';
+
+function buildWith({ env, existingPathList = [ENV_FILE_PATH, TUNNEL_KEY_PATH], envText = PACKAGED_ENV_TEXT }) {
   const recorder = makeWarnRecorder();
   const config = createBuilderConfig({
     env, fileExists: fileExistsAmong([...existingPathList, ...KIWI_MODEL_PATH_LIST]), warn: recorder.warn,
-    kiwiModelDir: KIWI_MODEL_DIR,
+    kiwiModelDir: KIWI_MODEL_DIR, readFile: () => envText,
   });
   return { config, warnMessageList: recorder.messageList };
 }
@@ -82,6 +84,19 @@ test('env 에 적은 파일이 없으면 비밀이 빠진 설치 파일을 만�
     () => buildWith({ env: { SEEON_BUILD_ENV_FILE: '/typo/.env' } }),
     /SEEON_BUILD_ENV_FILE/,
   );
+});
+
+test('.env 에 주석·다른 키 줄이 있으면 개발 PC .env 를 그대로 넣지 않게 멈추고, 그 내용은 알리지 않는다', () => {
+  const envText = '# GPU_SSH_PASSWORD=secret\nSEEON_ASR_LANGUAGE=ko\nOPENAI_API_KEY=sk-1\n';
+  let message = '';
+  try {
+    buildWith({ env: { SEEON_BUILD_ENV_FILE: ENV_FILE_PATH }, envText });
+  } catch (error) {
+    message = error.message;
+  }
+  assert.match(message, /SEEON_BUILD_ENV_FILE/);
+  assert.match(message, /2줄/);
+  assert.doesNotMatch(message, /secret|sk-1|GPU_SSH_PASSWORD|OPENAI/);
 });
 
 test('Windows: x64 NSIS 한 번 클릭 설치, 사용자 단위, 바탕화면·시작 메뉴 바로가기, 설치 후 바로 실행', () => {

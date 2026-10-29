@@ -17,6 +17,7 @@ function createFakeAudioContext() {
       connect() {},
     }),
     createPanner: () => ({ positionX: { value: 0 }, positionY: { value: 0 }, positionZ: { value: 0 }, connect() {} }),
+    createStereoPanner: () => ({ pan: { value: 0 }, connect() {} }),
     createMediaStreamSource: () => ({ connect() {}, disconnect() {} }),
     decodeAudioData: async (buffer) => ({ duration: buffer.durationSec ?? 2, id: buffer.id }),
     createBufferSource: () => {

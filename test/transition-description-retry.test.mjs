@@ -15,7 +15,7 @@ test('끝 문장부호가 붙어도 자료 명사로 끝난 묘사는 완결로 
   assert.equal(parsed.narration, '지역별 수익을 북쪽 42%, 남쪽 31%, 서쪽 27%로 비교한 막대 그래프');
 });
 
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 

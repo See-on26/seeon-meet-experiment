@@ -1,9 +1,6 @@
-const { requestConverseText } = require('./bedrock-converse');
-
-// 탐지 단계 LLM 판정(통합 라우터·무발화 판정·지시 판정)을 어디로 보낼지. gpu 는 GPU 서버 LLM 만 쓰고
-// 실패해도 Claude(Bedrock)로 넘기지 않는다. bedrock 을 고르거나 설정에 백엔드가 없으면(옛 호출) Bedrock 만 쓴다.
-const JUDGE_BACKEND_MAP = { gpu: 'gpu', bedrock: 'bedrock' };
-const JUDGE_SOURCE_MAP = { gpu: 'gpu', bedrock: 'bedrock' };
+// 탐지 단계 LLM 판정(통합 라우터·무발화 판정·지시 판정)은 GPU 서버의 판정 LLM 만 쓴다.
+// 실패해도 다른 서비스로 넘기지 않는다(그 판정은 해설하지 않음으로 끝난다).
+const JUDGE_SOURCE_MAP = { gpu: 'gpu' };
 
 // 판정 답은 짧은 JSON 이라 GPU 는 보통 1초 안에 답한다(실측 p95 약 0.65초). 이보다 오래 걸리면 판정을 포기한다(늦은 해설은 쓸모가 없다).
 const GPU_JUDGE_TIMEOUT_MS = 6000;
@@ -21,12 +18,8 @@ function toChatMessageList({ systemPrompt, messageList }) {
   ];
 }
 
-function createJudgeLlm({
-  config, fetchImpl = (...argList) => fetch(...argList), requestConverse = requestConverseText,
-}) {
-  const isGpuBackend = config.judgeBackend === JUDGE_BACKEND_MAP.gpu;
-
-  async function requestGpu({ systemPrompt, messageList, maxTokens, timeoutMs, label }) {
+function createJudgeLlm({ config, fetchImpl = (...argList) => fetch(...argList) }) {
+  async function requestText({ systemPrompt, messageList, maxTokens, timeoutMs, label }) {
     const response = await fetchImpl(config.judgeGpuUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -46,26 +39,7 @@ function createJudgeLlm({
     return { text: content, source: JUDGE_SOURCE_MAP.gpu };
   }
 
-  async function requestBedrock({ systemPrompt, messageList, maxTokens, timeoutMs, label }) {
-    const { text } = await requestConverse({
-      config, modelId: config.judgeModelId, systemPrompt, messageList, maxTokens, timeoutMs, label,
-    });
-    return { text, source: JUDGE_SOURCE_MAP.bedrock };
-  }
-
-  function requestText(request) {
-    return isGpuBackend ? requestGpu(request) : requestBedrock(request);
-  }
-
   return { requestText };
 }
 
-// GPU 백엔드는 Bedrock 키 없이도 판정할 수 있다. 둘 다 없으면 호출 쪽이 판정 없이 통과·차단을 정한다.
-function isJudgeAvailable({ config }) {
-  return config.judgeBackend === JUDGE_BACKEND_MAP.gpu || Boolean(config.bedrockApiKey);
-}
-
-module.exports = {
-  createJudgeLlm, toChatMessageList, isJudgeAvailable,
-  JUDGE_BACKEND_MAP, JUDGE_SOURCE_MAP, GPU_JUDGE_TIMEOUT_MS,
-};
+module.exports = { createJudgeLlm, toChatMessageList, JUDGE_SOURCE_MAP, GPU_JUDGE_TIMEOUT_MS };

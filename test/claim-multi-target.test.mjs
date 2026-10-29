@@ -65,7 +65,7 @@ test('두 쌍이 어절 예산을 넘으면 첫 쌍만 읽는다', () => {
   assert.equal(assemble(slotMap, { maxWordCount: 6 }), '첫 응답 시간, 9.2시간에서 3.1시간');
 });
 
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 

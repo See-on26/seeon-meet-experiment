@@ -8,7 +8,19 @@ const {
 } = require('../src/main/caption-pipeline/router/silence-judge.js');
 const { SILENCE_REASON_MAP } = require('../src/main/caption-pipeline/prompts/silence-judge.js');
 
-const config = { judgeModelId: 'anthropic.claude-sonnet-5', bedrockApiKey: 'key', bedrockRegion: 'us-east-1' };
+const config = { judgeGpuUrl: 'http://gpu.test/v1/chat/completions', judgeGpuModel: 'judge-test' };
+
+function createFakeJudgeLlm({ text = '', error = null } = {}) {
+  const requestList = [];
+  return {
+    requestList,
+    requestText: async (request) => {
+      requestList.push(request);
+      if (error) throw error;
+      return { text, source: SILENCE_JUDGE_SOURCE_MAP.gpu };
+    },
+  };
+}
 
 test('cue 가 true 일 때만 단서 있음으로 본다', () => {
   assert.deepEqual(parseSilenceJudgeText('{"cue": true, "reason": "presenting"}'), {
@@ -29,26 +41,23 @@ test('코드 블록으로 감싼 JSON 도 읽는다', () => {
 });
 
 test('직전 발화가 비어 있으면 모델을 부르지 않고 차단한다', async () => {
-  let callCount = 0;
-  const judge = createSilenceJudge({ config, requestConverse: async () => { callCount += 1; return { text: '' }; } });
+  const judgeLlm = createFakeJudgeLlm();
+  const judge = createSilenceJudge({ config, judgeLlm });
   const verdict = await judge.judge({ transcript: '   ', silenceMs: 5000 });
   assert.equal(verdict.hasCue, false);
   assert.equal(verdict.source, SILENCE_JUDGE_SOURCE_MAP.empty);
-  assert.equal(callCount, 0);
+  assert.equal(judgeLlm.requestList.length, 0);
 });
 
-test('판정 모델(judgeModelId)에 직전 발화와 무음 길이를 보낸다', async () => {
-  let request = null;
-  const judge = createSilenceJudge({
-    config,
-    requestConverse: async (args) => { request = args; return { text: '{"cue": true, "reason": "presenting"}' }; },
-  });
+test('판정 LLM 에 직전 발화와 무음 길이를 보내고 gpu 경로를 남긴다', async () => {
+  const judgeLlm = createFakeJudgeLlm({ text: '{"cue": true, "reason": "presenting"}' });
+  const judge = createSilenceJudge({ config, judgeLlm });
   const verdict = await judge.judge({ transcript: '여러분, 이 사진을 한번 보시죠.', silenceMs: 5200 });
   assert.equal(verdict.hasCue, true);
-  assert.equal(verdict.source, SILENCE_JUDGE_SOURCE_MAP.bedrock);
-  assert.equal(request.modelId, config.judgeModelId);
+  assert.equal(verdict.source, SILENCE_JUDGE_SOURCE_MAP.gpu);
+  const [request] = judgeLlm.requestList;
   assert.ok(Number.isFinite(request.timeoutMs));
-  // Sonnet 5 는 답 전에 숨은 추론으로 100~200토큰을 쓴다. 상한이 작으면 빈 답이 와서 단서가 있어도 차단된다.
+  // 상한이 작으면 JSON 이 잘려 단서가 있어도 차단된다.
   assert.ok(request.maxTokens >= 400);
   const lastMessage = request.messageList[request.messageList.length - 1];
   assert.equal(lastMessage.role, 'user');
@@ -57,9 +66,7 @@ test('판정 모델(judgeModelId)에 직전 발화와 무음 길이를 보낸다
 });
 
 test('모델 호출이 실패하면 차단한다', async () => {
-  const judge = createSilenceJudge({
-    config, requestConverse: async () => { throw new Error('Bedrock HTTP 500'); },
-  });
+  const judge = createSilenceJudge({ config, judgeLlm: createFakeJudgeLlm({ error: new Error('GPU 판정(무발화 판정) HTTP 500') }) });
   const verdict = await judge.judge({ transcript: '이 그래프를 보시면요.', silenceMs: 5000 });
   assert.equal(verdict.hasCue, false);
   assert.equal(verdict.source, SILENCE_JUDGE_SOURCE_MAP.error);

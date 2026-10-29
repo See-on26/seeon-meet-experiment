@@ -290,7 +290,7 @@ test('영어 전환 파싱: 자료 명사 검사 없이 받고, 상한을 넘긴
   assert.equal(document.narration, 'Web page, District office complaint filing guide');
 });
 
-const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm', bedrockApiKey: '' };
+const vlmConfig = { vlmUrl: 'http://x', vlmModel: 'm' };
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
@@ -381,8 +381,8 @@ test('전환 머리말: 영어는 Slide N / Page / Previous …', () => {
   assert.equal(buildTransitionNarration({ isSlide: true, displayNumber: 2, narration: 'Sales trend chart', ...en }), 'Slide 2: Sales trend chart');
   assert.equal(buildTransitionNarration({ isSlide: true, displayNumber: null, narration: 'Sales trend chart', ...en }), 'Sales trend chart');
   assert.equal(buildTransitionNarration({ isSlide: false, displayNumber: 2, narration: 'Salary policy PDF document', ...en }), 'Page: Salary policy PDF document');
-  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: 2, topic: 'Fair pay principles', ...en }), 'Previous slide 2: Fair pay principles');
-  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: null, topic: 'Fair pay principles', ...en }), 'Previous screen: Fair pay principles');
+  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: 2, topic: 'Fair pay principles', ...en }), 'Previous page: Fair pay principles');
+  assert.equal(buildRevisitNarration({ isSlide: true, displayNumber: null, topic: 'Fair pay principles', ...en }), 'Previous page: Fair pay principles');
   assert.equal(buildRevisitNarration({ isSlide: false, displayNumber: 2, topic: 'Salary policy', ...en }), 'Previous page: Salary policy');
   assert.equal(buildTransitionNarration({ isSlide: true, displayNumber: 2, narration: '매출 그래프', language: 'ko' }), '슬라이드 2: 매출 그래프');
 });

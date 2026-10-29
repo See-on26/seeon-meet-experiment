@@ -1,12 +1,11 @@
-const { ensureUsPrefix, buildInferenceConfig } = require('../agents/shared/bedrock-converse');
-const { createJudgeLlm, isJudgeAvailable } = require('../agents/shared/judge-llm');
+const { createJudgeLlm } = require('../agents/shared/judge-llm');
 const {
   JUDGE_REASON_MAP, JUDGE_SYSTEM_PROMPT, FEW_SHOT_LIST,
 } = require('../prompts/deixis-judge');
 
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_JUDGE_TOKENS = 40;
-const JUDGE_SOURCE_MAP = { gpu: 'gpu', bedrock: 'bedrock', fallback: 'fallback', error: 'error' };
+const JUDGE_SOURCE_MAP = { gpu: 'gpu', error: 'error' };
 
 function buildJudgeInput({ before = '', utterance, after = '' }) {
   return [
@@ -40,7 +39,6 @@ function parseJudgeText(text) {
 
 function createDeixisJudgeClient({ config, judgeLlm = createJudgeLlm({ config }) }) {
   async function judge({ utterance, before = '', after = '' }) {
-    if (!isJudgeAvailable({ config })) return { shouldCaption: true, reason: null, source: JUDGE_SOURCE_MAP.fallback };
     try {
       const { text, source } = await judgeLlm.requestText({
         systemPrompt: JUDGE_SYSTEM_PROMPT,
@@ -60,7 +58,4 @@ function createDeixisJudgeClient({ config, judgeLlm = createJudgeLlm({ config })
   return { judge };
 }
 
-module.exports = {
-  createDeixisJudgeClient, parseJudgeText, buildJudgeInput, ensureUsPrefix,
-  buildInferenceConfig, JUDGE_REASON_MAP,
-};
+module.exports = { createDeixisJudgeClient, parseJudgeText, buildJudgeInput, JUDGE_REASON_MAP };

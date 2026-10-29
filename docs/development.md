@@ -11,7 +11,7 @@
 # 1) 의존성 설치
 npm install
 
-# 2) 환경 변수 준비 (실서버·Bedrock을 쓸 때만 값 채움)
+# 2) 환경 변수 준비 (실서버를 쓸 때만 값 채움)
 cp .env.example .env
 
 # 3) 앱 실행
@@ -54,7 +54,6 @@ npm start
 | `SEEON_VLM_MAX_SOFT_TOKENS` | 화면을 읽는 서버가 그림 한 장을 나눌 이미지 토큰 수 상한(해상도)을 요청마다 넣는다. 서버를 `--trust-request-mm-kwargs` 로 띄웠을 때만 쓴다 — 그 옵션 없이 떠 있으면 요청별 값이 400 으로 거절돼 그림 요청이 모두 실패한다 | 꺼짐 (비우면 서버에 띄운 값) |
 | `SEEON_ASR_URL` | 소리를 받아쓰는 서버 | `http://127.0.0.1:8802/asr` |
 | `SEEON_TTS_URL` | 안내를 목소리로 바꾸는 서버 | `http://127.0.0.1:8803/tts` |
-| `SEEON_JUDGE_BACKEND` | 탐지 단계 LLM 판정(통합 라우터·무발화·지시 판정)을 어디서 할지. `gpu` 는 GPU 서버 LLM 만 쓰고 실패해도 Bedrock 으로 넘기지 않는다(그 판정은 공백 아님으로 본다), `bedrock` 은 Bedrock 만 | `gpu` |
 | `SEEON_JUDGE_GPU_MODEL` | 판정에 쓸 GPU LLM (주소는 `SEEON_JUDGE_GPU_URL`). VLM 과 같은 모델을 따로 띄운다 | `gemma-4-26b-a4b-qat` (`127.0.0.1:8805`) |
 | `SEEON_GAP_SOURCE` | 교차 모드(품질·균형)에서 해설을 넣을 틈을 무엇으로 찾을지. `asr` 은 받아쓰기 조각 끝 시각, `audio` 는 앱이 잰 회의 소리의 무음 구간(넣기 직전에 조용한 자리로 다시 맞춘다) | `asr` |
 | `SEEON_ROUTER_SCALE_ENABLED` | 추상적 척도 해설("꽤 넓죠"). `false` 면 끈다 | 켜짐 |
@@ -73,7 +72,6 @@ npm start
 | `SEEON_GPU_SSH_HOST_FINGERPRINT` | 서버 호스트 키 지문(`SHA256:…`). 다르면 연결하지 않는다 | 비어 있음 (비면 터널을 열지 않음) |
 | `SEEON_GPU_SSH_KEY` | 터널에 쓸 앱 전용 개인 키 파일 경로 | 비어 있음 (비면 터널을 열지 않음) |
 | `SEEON_GPU_TUNNEL` | `off` 면 앱이 터널을 열지 않는다(따로 연 터널만 쓴다) | `auto` |
-| `AWS_BEARER_TOKEN_BEDROCK` | Bedrock 키. 비우면 규칙 기반으로 대체한다 | 비어 있음 |
 
 ---
 
@@ -86,6 +84,7 @@ npm run dist:mac:dir    # 맥에서 설치본 동작만 확인할 때 — dist/m
 
 - Windows 결과는 `dist/SEEON-Setup-<버전>.exe` (약 100MB)예요. `dist/win-unpacked/` 는 설치 전 내용물이에요.
 - 설치본은 작업 파일을 `%APPDATA%\SEEON\out` 에, 회의 기록은 `문서\SEEON 회의 기록` 에 남겨요.
+- GPU 서버 설정과 터널 키를 넣은 설치본은 `npm run dist:win:kit` 으로 만들어요. 설치본 `.env` 에는 개발 PC `.env` 의 `SEEON_` 설정 줄만 들어가고 주석·다른 키는 빠져요. `SEEON_BUILD_ENV_FILE` 로 직접 넘긴 파일에 그런 줄이 있으면 빌드가 멈춰요.
 
 ---
 

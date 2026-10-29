@@ -13,9 +13,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// 설치본 .env 에는 앱이 읽는 SEEON_ 설정 줄만 넣는다(주석·다른 키·개발 PC 전용 값은 버린다).
+import { readEnvKey, sanitizeEnvText } from './packaged-env.cjs';
 
-// 개발 PC 에서만 맞는 값. 설치본에 들어가면 Windows 에 없는 맥 경로를 가리키거나 터널을 꺼 버린다.
-export const DEV_ONLY_ENV_KEY_LIST = ['SEEON_GPU_SSH_KEY', 'SEEON_GPU_TUNNEL'];
 // 앱마다 기준 브랜치·빌드 스크립트·설치 파일 이름·zip 이름·안내문이 다르다.
 // zip 안 폴더 이름은 ASCII 로 둔다. bsdtar zip 은 한글 이름에 UTF-8 표시를 하지 않아 Windows 탐색기에서 깨진다.
 export const KIT_APP_MAP = {
@@ -55,15 +55,6 @@ export function parseKitArgs(argList, { env, homeDir, repoRoot }) {
   if (!KIT_APP_MAP[option.app]) throw new Error(`--app 은 ${Object.keys(KIT_APP_MAP).join('·')} 중 하나다 (지금 ${option.app})`);
   if (!option.ref) option.ref = KIT_APP_MAP[option.app].defaultRef;
   return option;
-}
-
-function readEnvKey(line) {
-  const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-  return match ? match[1] : null;
-}
-
-export function sanitizeEnvText(text) {
-  return text.split(/\r?\n/).filter((line) => !DEV_ONLY_ENV_KEY_LIST.includes(readEnvKey(line))).join('\n');
 }
 
 export function readEnvValue(text, key) {

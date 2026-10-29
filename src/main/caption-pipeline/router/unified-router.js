@@ -1,4 +1,4 @@
-const { createJudgeLlm, isJudgeAvailable } = require('../agents/shared/judge-llm');
+const { createJudgeLlm } = require('../agents/shared/judge-llm');
 const {
   NARRATION_TYPE_MAP, DEIXIS_FORM_MAP, DEIXIS_REFERENCE_MAP,
   INTERPRETATION_KIND_MAP, VISUAL_DESCRIPTION_KIND_MAP,
@@ -14,7 +14,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 // 단순 수치·변화 X 판단마다 근거 구절을 옮겨 적으므로 예전(400)보다 넉넉히 둔다.
 const MAX_ROUTER_TOKENS = 500;
 
-const ROUTER_SOURCE_MAP = { gpu: 'gpu', bedrock: 'bedrock', fallback: 'fallback', error: 'error', none: 'none' };
+const ROUTER_SOURCE_MAP = { gpu: 'gpu', error: 'error', none: 'none' };
 
 const ROUTER_MODE_MAP = {
   judge: 'judge',
@@ -121,12 +121,6 @@ function createUnifiedRouter({ config, judgeLlm = createJudgeLlm({ config }) }) 
     const numberedList = numberCandidateList(candidateList);
     if (!numberedList.length) {
       return buildBlockedResult({ candidateList: [], blockedReason: ROUTER_BLOCKED_REASON_MAP.noCandidate, source: ROUTER_SOURCE_MAP.none });
-    }
-    // 판단할 수 없으면 해설을 만들지 않는다(최소 출력 원칙).
-    if (!isJudgeAvailable({ config })) {
-      return buildBlockedResult({
-        candidateList: numberedList, blockedReason: ROUTER_BLOCKED_REASON_MAP.judgeUnavailable, source: ROUTER_SOURCE_MAP.fallback,
-      });
     }
     // 묶음마다 자기 지시문으로 동시에 묻는다. 그 문장에 없는 묶음은 부르지 않는다.
     const groupList = Object.values(JUDGE_GROUP_MAP)

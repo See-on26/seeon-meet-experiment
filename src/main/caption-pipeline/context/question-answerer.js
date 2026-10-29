@@ -49,7 +49,7 @@ const NARRATION_REPLAY_LIMIT = 10;
 const FLOW_UTTERANCE_PER_SLIDE = 3;
 const FLOW_UTTERANCE_MAX_CHARS = 80;
 
-// 모델이 토큰 대신 "기록에 명시되어 있지 않습니다" 같은 설명으로 못 찾았다고 답하는 경우.
+// 지난 화면 답에서 모델이 토큰 대신 "기록에 명시되어 있지 않습니다" 같은 설명으로 못 찾았다고 답하는 경우. 저장해 둔 화면 그림을 다시 볼지 정한다.
 // 숫자가 든 답("날짜는 알 수 없지만 500만원…")은 답이 있는 것으로 본다.
 // 영어 답이면 "not mentioned"·"cannot find" 같은 거절 문장을 대소문자 없이 본다.
 const NOT_FOUND_PHRASE_PATTERN = new RegExp([
@@ -57,6 +57,100 @@ const NOT_FOUND_PHRASE_PATTERN = new RegExp([
   'not mentioned', 'not found', 'no information', 'cannot find', "can't find", 'can not find', 'not shown',
   'not stated', 'not specified', 'not in the record',
 ].join('|'), 'i');
+const DIGIT_PATTERN = /\d/;
+
+// 답 전체가 못 찾았다는 말인지 문장마다 본다. "단위는 나와 있지 않아요"처럼 내용을 말하면서 일부만 없다고 하거나,
+// "보이지 않는 위협"처럼 거절 말이 명사 앞 꼴로 들어간 진짜 답은 바꾸지 않는다.
+const SENTENCE_SPLIT_PATTERN = /(?<=[.!?。])\s+|\n+/;
+const SENTENCE_TRIM_PATTERN = /^[\s"'`*「『“]+|[\s"'`*」』”.!?。…~]+$/g;
+// 답 전체가 따옴표 한 쌍으로 싸여 있으면 화면 글자를 옮긴 것이다("요청하신 페이지를 찾을 수 없습니다").
+const QUOTED_ANSWER_PATTERN = /^(?:["“「『][^"“”「」『』]*["”」』]|'[^']*'|‘[^‘’]*’)[.!?。]?$/;
+// 앞머리 사과는 떼고 본다("죄송하지만 그 정보는 …", "Sorry, I couldn't …").
+const APOLOGY_PREFIX_PATTERN = /^(?:(?:죄송하지만|죄송합니다만|미안하지만|아쉽게도)\s*,?|죄송(?:합니다|해요)\s*,|(?:(?:i'm |i am )?sorry|unfortunately)\s*,\s*(?:but\s+)?)\s*/i;
+// 사과만 하는 문장은 거절 문장 앞뒤에 붙어도 답 내용으로 보지 않는다.
+const APOLOGY_SENTENCE_PATTERN = /^(?:죄송(?:합니다|해요)|미안(?:합니다|해요)|(?:i'm |i am )?sorry|unfortunately)$/i;
+// 쉼표·따옴표·이음말이 있으면 앞에 내용 있는 절이 있거나 남의 말을 옮긴 것이라 거절 문장으로 보지 않는다.
+// 장소의 "에서·여기서", "만으로·자료로"는 이음말 "-서·-로"로 보지 않는다. 작은따옴표는 영어 축약(couldn't)과 헷갈려 띄어쓰기 뒤에 열 때만 본다.
+const CONTENT_CLAUSE_PATTERN = new RegExp('[,;:"“”「」『』]|\\s[\'‘]'
+  + '|(?:지만|는데|은데|인데|이고|있고|없고|하고|되고|[았었였했]고|며|(?<![에기])서|라|(?<!만으|자료)로)\\s'
+  + '|(?:말|말씀|설명)(?:로는|으로는)|에\\s*따르면'
+  + '|\\b(?:but|although|though|however|while|and|because|since|said|says|told|explained)\\b', 'i');
+// 정보가 없다는 술어 앞에 말이 길면 사람 모습 같은 내용을 말한 뒤 일부만 모른다는 답이다.
+// 장소·지시어("화면과 발화에서", "해당")를 뺀 앞말이 이만큼 어절 이하일 때만 거절로 본다.
+const KO_PREFIX_MAX_WORD_COUNT = 2;
+const KO_PREFIX_FILLER_PATTERN = /^(?:(?:(?:화면|자료|슬라이드|발화|기록|회의|발표|대화)(?:과|와|이나|나|에|에는|에서|에서는|엔|만으로|만으로는)?)|현재|지금|지금은|제시된|주어진|해당|관련|그|이|그건|이건|그것은|여기|여기서|아직|잘)$/;
+const EN_PREFIX_MAX_WORD_COUNT = 4;
+const KO_ENDING = '(?:았|었)?(?:습니다|어요|아요|네요|다|음)';
+// 무엇이 어디에 있든 정보가 없다는 뜻인 술어(명시·언급·기록·찾기·알기).
+const KO_META_REFUSAL_PATTERN = new RegExp('(?:(?:명시|기재|언급)(?:되어|돼)\\s*있지\\s*않|언급(?:되|하)지\\s*않|언급(?:이|은|도)\\s*없'
+  + '|(?:알|확인할|찾을|파악할)\\s*수(?:가|는)?\\s*없|찾지\\s*못(?:했|하)|기록(?:에|에는|엔)\\s*없|모르겠)' + KO_ENDING + '$');
+// 화면에 보이는지를 말하는 술어. "그래프에는 증가 추세가 보이지 않아요" 같은 진짜 답에도 쓰여서,
+// 정보를 가리키는 말이 주어로 오거나 장소 바로 뒤에 술어만 올 때만 거절로 본다.
+const KO_VISUAL_REFUSAL = '(?:(?:(?:나와|포함되어|포함돼|표시되어|표시돼|적혀|나타나|제시되어|제시돼|담겨)\\s*있지\\s*않'
+  + '|(?:나오|보이|드러나|확인되)지\\s*않|없)' + KO_ENDING + '|안\\s*(?:나와|보여)(?:\\s*있어)?요)';
+const KO_VISUAL_REFUSAL_PATTERN = new RegExp(KO_VISUAL_REFUSAL + '$');
+const KO_INFO_SUBJECT_PATTERN = new RegExp('(?:^|\\s)(?:(?:해당|관련|그|이|그런|이런)\\s*)?(?:정보|내용)(?:은|는|이|가|도)\\s'
+  + '|(?:해당|관련|그|이|그런|이런)\\s*(?:항목|부분|수치|값|자료)(?:은|는|이|가|도)\\s|^(?:그건|그것은|그것도|이건)\\s');
+const KO_WH_SUBJECT_PATTERN = /(?:인지|는지|은지)(?:는|도)?\s/;
+const KO_PLACE = '(?:(?:제시된|현재|지금|이|그)\\s*)?(?:화면|자료|슬라이드|발화|기록|회의|발표|대화)(?:과\\s*발화|이나\\s*발화|나\\s*발화)?'
+  + '(?:에|에는|에서|에서는|엔)';
+const KO_PLACE_ONLY_REFUSAL_PATTERN = new RegExp('^(?:' + KO_PLACE + '\\s*)?' + KO_VISUAL_REFUSAL + '$');
+const KO_NOT_FOUND_CONTENT_PATTERN = /(?:없는|나와\s*있지\s*않은|나오지\s*않은|언급되지\s*않은|포함되지\s*않은|보이지\s*않는)\s*내용(?:이에요|입니다|이다|예요)$/;
+const EN_INFO_SUBJECT = '(?:that|this|it|that information|this information|the information|such information|that detail|this detail|the answer|that part)';
+const EN_NOT_BE = "(?:is|was|are|were)(?:\\s+not|n't)";
+const EN_NOT_DO = "(?:does|did|do)(?:\\s+not|n't)";
+const EN_SHOWN = '(?:shown|visible|displayed|included|listed|provided|given|available|mentioned|stated|specified|recorded|found'
+  + '|on (?:the|this) (?:screen|slide)|in (?:the|this) (?:slide|screen|record|transcript|meeting))';
+const EN_REFUSAL_PATTERN_LIST = [
+  new RegExp('^' + EN_INFO_SUBJECT + '\\s+' + EN_NOT_BE + '\\s+' + EN_SHOWN + '\\b'),
+  new RegExp('^' + EN_INFO_SUBJECT + '\\s+' + EN_NOT_DO + '\\s+(?:appear|show up|show)\\b'),
+  new RegExp('^(?:the )?(?:slide|screen|transcript|record|presentation|speaker|presenter)\\s+' + EN_NOT_DO
+    + '\\s+(?:mention|say|state|specify|include)\\b'),
+  new RegExp('^not\\s+' + EN_SHOWN + '\\b'),
+  /^i\s+(?:could not|couldn't|cannot|can't|can not|did not|didn't)\s+find\b/,
+  /^(?:there is|there's|there was|there are)\s+no\s+(?:information|mention|record|data|details?)\b/,
+  /^no\s+(?:information|mention|record|details?)\b/,
+];
+// 언급·명시·기록 여부는 주어와 상관없이 정보가 없다는 뜻이다("The amount is not mentioned in the record"). 주어가 짧을 때만 본다.
+const EN_META_REFUSAL_PATTERN = new RegExp('\\b' + EN_NOT_BE + '\\s+(?:mentioned|stated|specified|recorded)\\b');
+
+function isShortKoPrefix({ sentence, match }) {
+  const wordList = sentence.slice(0, match.index).trim().split(/\s+/).filter(Boolean);
+  return wordList.filter((word) => !KO_PREFIX_FILLER_PATTERN.test(word)).length <= KO_PREFIX_MAX_WORD_COUNT;
+}
+
+function isShortEnPrefix({ sentence, match }) {
+  return sentence.slice(0, match.index).trim().split(/\s+/).filter(Boolean).length <= EN_PREFIX_MAX_WORD_COUNT;
+}
+
+function isRefusalSentence(sentence) {
+  if (CONTENT_CLAUSE_PATTERN.test(sentence)) return false;
+  // 정보가 없다는 술어로 끝나면 앞말 길이만으로 정한다("수 없어요"가 보이는지 술어 "없어요"로 다시 걸리지 않게).
+  const koMetaMatch = sentence.match(KO_META_REFUSAL_PATTERN);
+  if (koMetaMatch) return isShortKoPrefix({ sentence, match: koMetaMatch });
+  if (KO_NOT_FOUND_CONTENT_PATTERN.test(sentence)) return true;
+  const koVisualMatch = sentence.match(KO_VISUAL_REFUSAL_PATTERN);
+  if (koVisualMatch) {
+    if (KO_INFO_SUBJECT_PATTERN.test(sentence) || KO_PLACE_ONLY_REFUSAL_PATTERN.test(sentence)) return true;
+    // "누구인지는 나와 있지 않아요" 꼴은 앞에 사람 모습 같은 내용이 길게 오지 않을 때만 거절로 본다.
+    if (KO_WH_SUBJECT_PATTERN.test(sentence)) return isShortKoPrefix({ sentence, match: koVisualMatch });
+  }
+  const lowered = sentence.toLowerCase().replace(/\b(that|it|this)'s\b/g, '$1 is');
+  const enMetaMatch = lowered.match(EN_META_REFUSAL_PATTERN);
+  if (enMetaMatch && isShortEnPrefix({ sentence: lowered, match: enMetaMatch })) return true;
+  return EN_REFUSAL_PATTERN_LIST.some((pattern) => pattern.test(lowered));
+}
+
+// 숫자 없이 답 전체가 못 찾았다고만 말하는 답인가. 이런 답은 근거 없음으로 보고 고정 문구로 바꾼다.
+function isNotFoundAnswerText(text) {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed || DIGIT_PATTERN.test(trimmed) || QUOTED_ANSWER_PATTERN.test(trimmed)) return false;
+  const sentenceList = trimmed.split(SENTENCE_SPLIT_PATTERN)
+    .map((sentence) => sentence.replace(/[’‘]/g, "'").replace(SENTENCE_TRIM_PATTERN, '').replace(APOLOGY_PREFIX_PATTERN, ''))
+    .filter(Boolean);
+  const contentList = sentenceList.filter((sentence) => !APOLOGY_SENTENCE_PATTERN.test(sentence));
+  return contentList.length > 0 && contentList.every(isRefusalSentence);
+}
 const TOKEN_WRAPPER_PATTERN = /^[\s"'`*「『“]+/;
 
 // 교차 모드는 사용자가 회의를 늦게 듣는다. 이만큼 늦으면 '지금 화자'를 실시간 화면이 아니라 들은 시점 발화로 정한다.
@@ -67,11 +161,23 @@ function toAnswer({ content, wordBudget, language = DEFAULT_CAPTION_LANGUAGE }) 
   const { text, isGrounded } = parseGroundingText(
     content, computeMaxChars({ maxWordCount: wordBudget.maxWordCount, language }), wordBudget.maxWordCount, language,
   );
-  return isGrounded ? { text, isGrounded: true, isImageUsed: false } : notFound({ language });
+  return isGrounded && !isNotFoundAnswerText(text) ? { text, isGrounded: true, isImageUsed: false } : notFound({ language });
 }
 
 function notFound({ language = DEFAULT_CAPTION_LANGUAGE } = {}) {
   return { text: readAnswerText({ key: ANSWER_TEXT_KEY_MAP.notFound, language }), isGrounded: false, isImageUsed: false };
+}
+
+// 사용자에게 들려줄 질문 답. 근거가 없거나(NONE·빈 답) 비었으면 고정 문구 "화면과 발화에 없는 내용이에요"(영어 캡션이면
+// 영어 문구)로 답한다. 앱이 만든 문장(해설 다시 듣기·지금 화자·회의와 무관·그림 없음)과 이미 거른 모델 답은 이것만 거친다.
+function resolveGroundedText({ text, isGrounded, language = DEFAULT_CAPTION_LANGUAGE }) {
+  if (isGrounded && text) return { text, isGrounded: true };
+  return { text: readAnswerText({ key: ANSWER_TEXT_KEY_MAP.notFound, language }), isGrounded: false };
+}
+
+// 모델이 화면을 보고 바로 쓴 답(프리셋·현재 화면 질문). 거절 문장으로 답했어도 근거 없음으로 보고 고정 문구로 바꾼다.
+function resolveAnswerText({ text, isGrounded, language = DEFAULT_CAPTION_LANGUAGE }) {
+  return resolveGroundedText({ text, isGrounded: Boolean(isGrounded) && !isNotFoundAnswerText(text), language });
 }
 
 // getCaptionLanguage 는 이번 세션의 캡션 언어다. 답 프롬프트·고정 문구가 이 언어를 따른다.
@@ -112,7 +218,7 @@ function createQuestionAnswerer({ requestText, requestImage, readImage, contextS
     // 모델이 "기록에 없습니다. NEED_IMAGE"처럼 설명 뒤에 토큰을 붙이기도 한다. 어디에 있든 이미지 재조회로 본다.
     const isImageRequested = trimmed.includes(NEED_IMAGE_TOKEN);
     const isNotFound = new RegExp(`^${GROUNDING_NONE_TOKEN}\\b`, 'i').test(trimmed)
-      || (NOT_FOUND_PHRASE_PATTERN.test(trimmed) && !/\d/.test(trimmed));
+      || (NOT_FOUND_PHRASE_PATTERN.test(trimmed) && !DIGIT_PATTERN.test(trimmed));
     if (!isImageRequested && !isNotFound) return toAnswer({ content, wordBudget, language });
     const imagePath = slideList[0].imagePath;
     const jpegBuffer = imagePath ? await readImage(imagePath) : null;
@@ -227,4 +333,5 @@ function createQuestionAnswerer({ requestText, requestImage, readImage, contextS
 module.exports = {
   createQuestionAnswerer, NOT_FOUND_TEXT, NO_IMAGE_TEXT, SPEAKER_UNKNOWN_TEXT, OFF_TOPIC_TEXT,
   ANSWER_TEXT_KEY_MAP, readAnswerText, buildSpeakerNowText, NOT_FOUND_PHRASE_PATTERN,
+  isNotFoundAnswerText, resolveAnswerText, resolveGroundedText,
 };
