@@ -13,8 +13,21 @@ export function loadRepoEnv({ envFilePath = path.join(REPO_ROOT, '.env'), loadEn
   }
 }
 
-// 토큰이 없으면 3.1 은 GPU 판정이 실패한 호출을 Bedrock 이 대신 판정하지 못해 "판정 실패(해설 안 함)"로 떨어지고,
-// 3.2 는 답변 모델을 부르지 못한다. 그대로 돌리면 지표가 의미 없으므로 시작할 때 멈춘다.
+// 3.2 이해 평가의 답변 모델(Bedrock) 설정. 앱 설정(readPipelineConfig)에는 Bedrock 칸이 없으므로 .env 에서 직접 읽는다.
+export const DEFAULT_BEDROCK_REGION = 'us-east-1';
+export const DEFAULT_BEDROCK_MODEL_ID = 'anthropic.claude-sonnet-5';
+
+export function readBedrockConfig({ env = process.env } = {}) {
+  return {
+    bedrockRegion: env.SEEON_BEDROCK_REGION || DEFAULT_BEDROCK_REGION,
+    bedrockModelId: env.SEEON_BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL_ID,
+    bedrockApiKey: env.AWS_BEARER_TOKEN_BEDROCK || '',
+    converseOrigin: env.SEEON_BEDROCK_CONVERSE_ORIGIN || '',
+  };
+}
+
+// 토큰이 없으면 3.2 는 답변 모델을 부르지 못한다. 그대로 돌리면 지표가 의미 없으므로 시작할 때 멈춘다.
+// 3.1 탐지 평가는 판정을 GPU 서버만 하므로 토큰이 필요 없다.
 export function assertBedrockToken({ env = process.env } = {}) {
   if (!env.AWS_BEARER_TOKEN_BEDROCK) {
     throw new Error('AWS_BEARER_TOKEN_BEDROCK 이 없다 — Bedrock 을 부를 수 없어 평가를 멈춘다 (.env 확인)');

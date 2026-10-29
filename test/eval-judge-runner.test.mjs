@@ -66,7 +66,8 @@ test('판단 응답을 읽지 못하면 production 이 X(해설 안 함)로 처�
   assert.equal(classify({}, '판단하기 어렵습니다'), PATH_ERROR_MAP.parse);
   assert.equal(classify({}, ''), PATH_ERROR_MAP.emptyText);
   assert.equal(classify({ source: 'error' }, ''), PATH_ERROR_MAP.http);
-  assert.equal(classify({ source: 'fallback' }, null), PATH_ERROR_MAP.noToken);
+  assert.equal(classifyRouterPathError({ routed: { ...routed, source: 'error' }, capture: { rawText: '', status: 200 }, candidateList }),
+    PATH_ERROR_MAP.emptyText, 'GPU 판정은 200 응답이라도 글이 비면 실패로 던진다 — 연결 실패가 아니라 빈 글이다');
   assert.equal(classify({}, '{"judgeList":[{"id":1,"gap":"X","reason":"앞에서 밝힘"}]}'), null);
   assert.equal(classify({}, '{"judgeList":[]}'), PATH_ERROR_MAP.parse, '판단이 빠진 후보는 production 이 "판단 없음" X 로 채운다');
   assert.equal(isRouterTextWellFormed({ text: '```json\n{"judgeList":[{"id":1,"gap":"o"},{"id":2,"gap":"X"}]}\n```', candidateCount: 2 }), true);
@@ -104,10 +105,11 @@ test('판단 프롬프트 해시는 두 묶음 지시문·예시를 모두 담�
   assert.equal(PROMPT_HASH_MAP.router, hashInput({ promptMap: ROUTER_PROMPT_MAP }));
 });
 
-test('무발화 판정기는 HTTP 오류와 cue 없는 응답을 경로 오류로 센다', () => {
+test('무발화 판정기는 HTTP 오류·빈 글과 cue 없는 응답을 경로 오류로 센다', () => {
   assert.equal(classifySilencePathError({ judged: { source: 'error' }, capture: {} }), PATH_ERROR_MAP.http);
-  assert.equal(classifySilencePathError({ judged: { source: 'bedrock' }, capture: { rawText: '모르겠다' } }), PATH_ERROR_MAP.parse);
-  assert.equal(classifySilencePathError({ judged: { source: 'bedrock' }, capture: { rawText: '{"cue":false,"reason":"end"}' } }), null);
+  assert.equal(classifySilencePathError({ judged: { source: 'error' }, capture: { status: 200, rawText: '' } }), PATH_ERROR_MAP.emptyText);
+  assert.equal(classifySilencePathError({ judged: { source: 'gpu' }, capture: { rawText: '모르겠다' } }), PATH_ERROR_MAP.parse);
+  assert.equal(classifySilencePathError({ judged: { source: 'gpu' }, capture: { rawText: '{"cue":false,"reason":"end"}' } }), null);
   assert.equal(classifySilencePathError({ judged: { source: 'empty' }, capture: null }), null);
 });
 
@@ -162,13 +164,13 @@ function createFakeRunner({ routeImpl, judgeImpl }) {
     route: async (input) => {
       callLog.route += 1;
       const { text, textList, routed } = routeImpl(input);
-      for (const answerText of textList || [text]) await recorder.fetch('https://bedrock.example/router', { text: answerText });
+      for (const answerText of textList || [text]) await recorder.fetch('http://gpu.example/v1/chat/completions', { text: answerText });
       return routed;
     },
     judgeSilence: async (input) => {
       callLog.judge += 1;
       const { text, judged } = judgeImpl(input);
-      await recorder.fetch('https://bedrock.example/silence', { text });
+      await recorder.fetch('http://gpu.example/v1/chat/completions', { text });
       return judged;
     },
     capture: recorder.capture,
@@ -185,7 +187,7 @@ test('판정 결과는 입력 해시로 캐시하고 경로 오류는 캐시하�
       const good = buildRouted({ candidateList: input.candidateList, verdictMap: { 1: 'O' } });
       return isBroken ? { text: '음', routed: buildRouted({ candidateList: input.candidateList, verdictMap: {} }).routed } : good;
     },
-    judgeImpl: () => ({ text: '{}', judged: { hasCue: false, reason: null, source: 'bedrock' } }),
+    judgeImpl: () => ({ text: '{}', judged: { hasCue: false, reason: null, source: 'gpu' } }),
   });
   const input = { utterance: '이 부분이요', before: '', after: '', candidateList: [{ type: 'demonstrative', phrase: '이 부분', start: 0, end: 4 }] };
   assert.equal((await runner.runRouter({ input, repeatIndex: 0 })).pathError, PATH_ERROR_MAP.parse);
@@ -250,7 +252,7 @@ test('production 후보만 넘긴 호출로 시스템 성능을, 말주머니에
       routeInputList.push(input);
       return buildRouted({ candidateList: input.candidateList, verdictMap: { 1: 'O', 2: 'O' } });
     },
-    judgeImpl: () => ({ text: '{"cue":true,"reason":"보라고 함"}', judged: { hasCue: true, reason: '보라고 함', source: 'bedrock' } }),
+    judgeImpl: () => ({ text: '{"cue":true,"reason":"보라고 함"}', judged: { hasCue: true, reason: '보라고 함', source: 'gpu' } }),
   });
   const { rowList, rawList } = await evaluateScorePlan({
     plan, mode: 'delayed', contextWindow: resolveContextWindow({ mode: 'delayed' }), repeatIndex: 0, runner, concurrency: 2, isScaleEnabled: false,
@@ -283,7 +285,7 @@ test('시스템 호출과 판정 호출의 O/X 가 다르면 지표마다 제 �
   const plan = buildRulePlan();
   const runRoute = async ({ routeImpl }) => {
     const { runner } = createFakeRunner({
-      routeImpl, judgeImpl: () => ({ text: '{"cue":false,"reason":"end"}', judged: { hasCue: false, reason: 'end', source: 'bedrock' } }),
+      routeImpl, judgeImpl: () => ({ text: '{"cue":false,"reason":"end"}', judged: { hasCue: false, reason: 'end', source: 'gpu' } }),
     });
     const { rowList } = await evaluateScorePlan({
       plan, mode: 'delayed', contextWindow: resolveContextWindow({ mode: 'delayed' }), repeatIndex: 0, runner, concurrency: 1, isScaleEnabled: true,
@@ -307,28 +309,29 @@ test('production 라우터·무발화 판정기가 실패를 해설 안 함·차
   t.mock.method(console, 'error', () => {});
   const { createUnifiedRouter } = require('../src/main/caption-pipeline/router/unified-router.js');
   const { createSilenceJudge } = require('../src/main/caption-pipeline/router/silence-judge.js');
-  const textBody = (content, stopReason = 'end_turn') => JSON.stringify({ output: { message: { content } }, stopReason, usage: null });
+  const { readPipelineConfig } = require('../src/main/caption-pipeline/config.js');
+  const chatBody = (content, finishReason = 'stop') => JSON.stringify({ choices: [{ message: { content }, finish_reason: finishReason }] });
   const responseMap = {
     http: () => new Response('{"message":"throttled"}', { status: 429 }),
     network: () => { throw new TypeError('fetch failed'); },
-    unparsable: () => new Response(textBody([{ text: '판단하기 어렵습니다' }]), { status: 200 }),
-    maxTokensEmpty: () => new Response(textBody([{ reasoningContent: { reasoningText: { text: '...' } } }], 'max_tokens'), { status: 200 }),
-    maxTokensCut: () => new Response(textBody([{ text: '{"judgeList":[{"id":1,"gap":"O","rea' }], 'max_tokens'), { status: 200 }),
-    routerOk: () => new Response(textBody([{ text: '{"judgeList":[{"id":1,"gap":"O","reason":"대상 없음"}]}' }]), { status: 200 }),
-    silenceOk: () => new Response(textBody([{ text: '{"cue":false,"reason":"end"}' }]), { status: 200 }),
+    unparsable: () => new Response(chatBody('판단하기 어렵습니다'), { status: 200 }),
+    lengthEmpty: () => new Response(chatBody('', 'length'), { status: 200 }),
+    lengthCut: () => new Response(chatBody('{"judgeList":[{"id":1,"gap":"O","rea', 'length'), { status: 200 }),
+    routerOk: () => new Response(chatBody('{"judgeList":[{"id":1,"gap":"O","reason":"대상 없음"}]}'), { status: 200 }),
+    silenceOk: () => new Response(chatBody('{"cue":false,"reason":"end"}'), { status: 200 }),
   };
   let responseKey = null;
   const recorder = createFetchRecorder({ baseFetch: async () => responseMap[responseKey]() });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = recorder.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
-  const config = { bedrockApiKey: 'tok-secret', bedrockRegion: 'us-east-1', judgeModelId: 'anthropic.claude-sonnet-5' };
-  const createRunner = (runnerConfig) => createJudgeRunner({
-    route: createUnifiedRouter({ config: runnerConfig }).route,
-    judgeSilence: createSilenceJudge({ config: runnerConfig }).judge,
+  const config = { ...readPipelineConfig({}), judgeGpuUrl: 'http://gpu.example/v1/chat/completions' };
+  const runner = createJudgeRunner({
+    route: createUnifiedRouter({ config }).route,
+    judgeSilence: createSilenceJudge({ config }).judge,
     capture: recorder.capture,
     cache: createCacheStore(),
-    routerModelId: runnerConfig.judgeModelId,
+    routerModelId: buildJudgeModelLabel({ config }),
   });
   const routerInput = {
     utterance: '이 부분이요', before: '', after: '', candidateList: [{ type: 'demonstrative', phrase: '이 부분', start: 0, end: 4 }],
@@ -336,19 +339,12 @@ test('production 라우터·무발화 판정기가 실패를 해설 안 함·차
   const silenceInput = { transcript: '이 사진을 보시죠.', silenceMs: 5000, precondition: { isReady: true, reason: null } };
   const isAllX = (routed) => routed.candidateList.length === 0 && routed.judgeList.every((entry) => !entry.isGap);
 
-  const noTokenRunner = createRunner({ ...config, bedrockApiKey: '' });
-  const noTokenRouted = await noTokenRunner.runRouter({ input: routerInput, repeatIndex: 0 });
-  assert.equal(noTokenRouted.pathError, PATH_ERROR_MAP.noToken);
-  assert.equal(isAllX(noTokenRouted.routed), true, 'production 은 판정할 수 없으면 해설하지 않는다(X)');
-  assert.equal((await noTokenRunner.runSilence({ input: silenceInput, repeatIndex: 0 })).pathError, PATH_ERROR_MAP.noToken);
-
-  const runner = createRunner(config);
   const routerCaseList = [
     ['http', PATH_ERROR_MAP.http, 'error'],
     ['network', PATH_ERROR_MAP.http, 'error'],
-    ['unparsable', PATH_ERROR_MAP.parse, 'bedrock'],
-    ['maxTokensEmpty', PATH_ERROR_MAP.emptyText, 'bedrock'],
-    ['maxTokensCut', PATH_ERROR_MAP.parse, 'bedrock'],
+    ['unparsable', PATH_ERROR_MAP.parse, 'gpu'],
+    ['lengthEmpty', PATH_ERROR_MAP.emptyText, 'error'],
+    ['lengthCut', PATH_ERROR_MAP.parse, 'gpu'],
   ];
   for (const [key, expectedError, expectedSource] of routerCaseList) {
     responseKey = key;
@@ -356,10 +352,9 @@ test('production 라우터·무발화 판정기가 실패를 해설 안 함·차
     assert.equal(output.pathError, expectedError, `라우터 ${key}`);
     assert.equal(output.routed.source, expectedSource, `라우터 ${key} source`);
     assert.equal(isAllX(output.routed), true, `라우터 ${key} 는 해설 안 함(X)으로 덮인다`);
-    assert.doesNotMatch(JSON.stringify(output), /tok-secret/);
   }
-  responseKey = 'maxTokensCut';
-  assert.equal((await runner.runRouter({ input: routerInput, repeatIndex: 0 })).capture.stopReason, 'max_tokens');
+  responseKey = 'lengthCut';
+  assert.equal((await runner.runRouter({ input: routerInput, repeatIndex: 0 })).capture.stopReason, 'length');
   responseKey = 'routerOk';
   const okOutput = await runner.runRouter({ input: routerInput, repeatIndex: 0 });
   assert.equal(okOutput.pathError, null);
@@ -369,7 +364,7 @@ test('production 라우터·무발화 판정기가 실패를 해설 안 함·차
     ['http', PATH_ERROR_MAP.http],
     ['network', PATH_ERROR_MAP.http],
     ['unparsable', PATH_ERROR_MAP.parse],
-    ['maxTokensEmpty', PATH_ERROR_MAP.emptyText],
+    ['lengthEmpty', PATH_ERROR_MAP.emptyText],
     ['silenceOk', null],
   ];
   for (const [key, expectedError] of silenceCaseList) {
@@ -377,7 +372,6 @@ test('production 라우터·무발화 판정기가 실패를 해설 안 함·차
     const output = await runner.runSilence({ input: silenceInput, repeatIndex: 0 });
     assert.equal(output.pathError, expectedError, `무발화 ${key}`);
     assert.equal(output.judged.hasCue, false, `무발화 ${key} 는 차단으로 덮인다`);
-    assert.doesNotMatch(JSON.stringify(output), /tok-secret/);
   }
 });
 
@@ -391,7 +385,7 @@ test('동시에 돌린 호출의 원문은 서로 섞이지 않는다', async ()
   const delayList = [15, 1, 10, 5, 0];
   const outputList = await mapWithConcurrency({
     itemList: delayList, concurrency: delayList.length,
-    run: (delayMs, index) => recorder.capture(() => recorder.fetch('https://bedrock.example/router', { text: `answer-${index}`, delayMs })),
+    run: (delayMs, index) => recorder.capture(() => recorder.fetch('http://gpu.example/v1/chat/completions', { text: `answer-${index}`, delayMs })),
   });
   assert.deepEqual(outputList.map(({ captureList }) => summarizeConverseCapture(captureList).rawText), delayList.map((_delayMs, index) => `answer-${index}`));
 });
@@ -407,7 +401,7 @@ test('판정 결과를 만드는 production 코드가 바뀌면 캐시 키가 �
   const fileList = Object.values(PRODUCTION_SOURCE_FILE_LIST_MAP).flat();
   for (const filePath of [
     'src/main/caption-pipeline/router/unified-router.js', 'src/main/caption-pipeline/router/silence-judge.js',
-    'src/main/caption-pipeline/agents/shared/bedrock-converse.js', 'src/main/caption-pipeline/prompts/unified-router.js',
+    'src/main/caption-pipeline/agents/shared/judge-llm.js', 'src/main/caption-pipeline/prompts/unified-router.js',
     'src/main/caption-pipeline/prompts/silence-judge.js', 'src/main/caption-pipeline/trigger/speech-trigger.js',
   ]) {
     assert.ok(fileList.includes(filePath), `${filePath} 가 캐시 키에 든다`);
@@ -428,7 +422,7 @@ test('판정 결과를 만드는 production 코드가 바뀌면 캐시 키가 �
     },
     judgeSilence: async () => {
       callLog.judge += 1;
-      return { hasCue: false, reason: 'end', source: 'bedrock' };
+      return { hasCue: false, reason: 'end', source: 'gpu' };
     },
     capture: async (run) => {
       const result = await run();
@@ -461,7 +455,7 @@ test('GPU LLM(OpenAI chat) 응답 원문에서도 글·종료 사유·사용량�
   assert.deepEqual(summary.usage, { prompt_tokens: 10, completion_tokens: 5 });
 });
 
-test('GPU 가 실패하고 Bedrock 으로 넘어간 판정은 마지막(Bedrock) 응답을 읽는다', () => {
+test('기록된 응답이 여럿이면 마지막 응답을 읽는다(옛 결과의 Bedrock 꼴도 읽는다)', () => {
   const summary = summarizeConverseCapture([
     { url: 'http://127.0.0.1:8801/v1/chat/completions', status: null, bodyText: '', elapsedMs: 3, errorMessage: 'fetch failed' },
     { url: 'https://bedrock', status: 200, bodyText: converseBody('{"cue":false}'), elapsedMs: 2100, errorMessage: null },
@@ -469,7 +463,7 @@ test('GPU 가 실패하고 Bedrock 으로 넘어간 판정은 마지막(Bedrock)
   assert.equal(summary.rawText, '{"cue":false}');
 });
 
-test('무발화 판정이 gpu 로 답했으면 bedrock 과 같이 원문 형식을 검사한다', () => {
+test('무발화 판정이 gpu 로 답했으면 원문 형식을 검사한다', () => {
   const capture = { rawText: '{"cue":true,"reason":"presenting"}' };
   assert.equal(classifySilencePathError({ judged: { source: 'gpu' }, capture }), null);
   assert.equal(classifySilencePathError({ judged: { source: 'gpu' }, capture: { rawText: 'cue=yes' } }), PATH_ERROR_MAP.parse);
@@ -483,17 +477,15 @@ test('판정 원문 해시에 판정 LLM 경로 모듈(judge-llm.js)과 설정(c
   }
 });
 
-test('판정 모델 이름표: gpu 백엔드면 GPU 모델(폴백 Bedrock), bedrock 이면 Bedrock 모델', () => {
-  assert.equal(buildJudgeModelLabel({ config: { judgeBackend: 'gpu', judgeGpuModel: 'gemma-4-26b-a4b-qat', judgeModelId: 'anthropic.claude-sonnet-5' } }),
-    'gpu:gemma-4-26b-a4b-qat');
-  assert.equal(buildJudgeModelLabel({ config: { judgeBackend: 'bedrock', judgeModelId: 'anthropic.claude-sonnet-5' } }), 'anthropic.claude-sonnet-5');
+test('판정 모델 이름표는 GPU 서버 판정 모델이다', () => {
+  assert.equal(buildJudgeModelLabel({ config: { judgeGpuModel: 'gemma-4-26b-a4b-qat' } }), 'gpu:gemma-4-26b-a4b-qat');
 });
 
-test('판정 경로별 호출 수를 센다(gpu·bedrock·그 밖)', () => {
+test('판정 경로별 호출 수를 센다(gpu·error)', () => {
   const rawList = [
     { kind: 'router', output: { source: 'gpu' } }, { kind: 'router', output: { source: 'gpu' } },
-    { kind: 'router', output: { source: 'bedrock' } }, { kind: 'silence', output: { source: 'gpu' } },
+    { kind: 'router', output: { source: 'gpu' } }, { kind: 'silence', output: { source: 'gpu' } },
     { kind: 'silence', output: null, skipReason: 'no_transcript' }, { kind: 'router', output: { source: 'error' } },
   ];
-  assert.deepEqual(countJudgeSource({ rawList }), { gpu: 3, bedrock: 1, error: 1 });
+  assert.deepEqual(countJudgeSource({ rawList }), { gpu: 4, error: 1 });
 });

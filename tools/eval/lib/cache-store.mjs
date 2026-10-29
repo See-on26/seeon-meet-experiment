@@ -6,7 +6,7 @@ export function hashInput(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-// 입력 해시 → JSON 파일. 같은 입력으로 다시 돌리면 Bedrock 을 부르지 않는다.
+// 입력 해시 → JSON 파일. 같은 입력으로 다시 돌리면 판정·답변 모델을 다시 부르지 않는다.
 export function createCacheStore({ cacheDir = null } = {}) {
   if (!cacheDir) return { isEnabled: false, read: () => null, write: () => {} };
   fs.mkdirSync(cacheDir, { recursive: true });

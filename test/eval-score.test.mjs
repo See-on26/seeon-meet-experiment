@@ -246,7 +246,7 @@ function prepareInput() {
   return { dir, inFile };
 }
 
-test('잘못된 옵션은 토큰 확인보다 먼저 2 로 끝난다', async () => {
+test('잘못된 옵션은 판정기를 부르기 전에 2 로 끝난다', async () => {
   const { inFile } = prepareInput();
   const logList = [];
   assert.equal(await runScoreCommand({ argList: ['--in', inFile, '--context', 'wide'], env: {}, log: (line) => logList.push(line) }), 2);
@@ -269,23 +269,30 @@ test('맥락 창 ms·반복·동시 호출·매처 값이 비었거나 숫자가
   const logText = logList.join('\n');
   for (const name of ['--before-ms', '--after-ms', '--repeat', '--concurrency', '--matcher']) assert.match(logText, new RegExp(name));
   assert.equal(
-    await runScoreCommand({ argList: ['--in', inFile, '--before-ms', '0', '--after-ms', '1500.5'], env: {}, log: () => {} }),
-    1,
-    '0 과 소수 ms 는 받아들이고 토큰 확인까지 간다',
+    await runScoreCommand({
+      argList: ['--in', inFile, '--before-ms', '0', '--after-ms', '1500.5', '--no-cache', '--matcher', 'regex',
+        '--out-dir', path.join(path.dirname(inFile), 'out-ms')],
+      env: {}, log: () => {}, ...buildGpuStubOption(),
+    }),
+    0,
+    '0 과 소수 ms 는 받아들여 판정까지 돈다',
   );
 });
 
-test('토큰이 없으면 판정기를 부르지 않고 바로 멈춘다', async () => {
-  const { inFile } = prepareInput();
+test('3.1 은 판정을 GPU 서버만 하므로 Bedrock 토큰 없이 판정기를 부른다', async () => {
+  const { dir, inFile } = prepareInput();
   const logList = [];
   let routeCount = 0;
+  const stubOption = buildGpuStubOption();
   const code = await runScoreCommand({
-    argList: ['--in', inFile], env: {}, log: (line) => logList.push(line),
-    createRouter: () => ({ route: async () => { routeCount += 1; return {}; } }),
+    argList: ['--in', inFile, '--no-cache', '--matcher', 'regex', '--out-dir', path.join(dir, 'out-no-token')],
+    env: {}, log: (line) => logList.push(line),
+    ...stubOption,
+    createRouter: () => ({ route: async (input) => { routeCount += 1; return buildNoGapRouted(input); } }),
   });
-  assert.equal(code, 1);
-  assert.equal(routeCount, 0);
-  assert.match(logList.join('\n'), /AWS_BEARER_TOKEN_BEDROCK/);
+  assert.equal(code, 0);
+  assert.ok(routeCount > 0);
+  assert.doesNotMatch(logList.join('\n'), /AWS_BEARER_TOKEN_BEDROCK/);
 });
 
 const NO_GAP_TEXT = '{"judgeList":[{"id":1,"gap":"X","reason":"앞 발화가 가리킨다"}]}';
@@ -294,8 +301,28 @@ const buildNoGapRouted = ({ candidateList }) => ({
   candidateList: [],
   judgeList: candidateList.map((candidate, index) => ({ ...candidate, id: index + 1, isGap: false, reason: '앞 발화가 가리킨다' })),
   blockedReason: 'no_gap',
-  source: 'bedrock',
+  source: 'gpu',
 });
+
+const gpuChatBody = (content) => JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }] });
+// 네트워크 없이 채점 명령을 끝까지 돌리는 가짜 판정기·매처·트리거·git.
+function buildGpuStubOption() {
+  let installedFetch = null;
+  return {
+    baseFetch: async () => new Response(gpuChatBody(NO_GAP_TEXT)),
+    installFetch: (fetchImpl) => { installedFetch = fetchImpl; },
+    createRouter: () => ({
+      route: async (input) => {
+        await installedFetch('http://gpu.example/v1/chat/completions', {});
+        return buildNoGapRouted(input);
+      },
+    }),
+    createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'gpu' }) }),
+    createMatcher: async () => REGEX_MATCHER,
+    createTrigger: async () => RULE_PRODUCTION_TRIGGER,
+    readGit: async () => ({ head: 'abc', productionMergeBase: 'def' }),
+  };
+}
 
 test('score 는 판정을 돌려 report·metrics·errors·raw 를 쓴다', async () => {
   const { dir, inFile } = prepareInput();
@@ -303,17 +330,17 @@ test('score 는 판정을 돌려 report·metrics·errors·raw 를 쓴다', async
   let installedFetch = null;
   const code = await runScoreCommand({
     argList: ['--in', inFile, '--mode', 'all', '--no-cache', '--matcher', 'regex', '--out-dir', outDir],
-    env: { AWS_BEARER_TOKEN_BEDROCK: 'token-for-test' },
+    env: {},
     log: () => {},
-    baseFetch: async () => new Response(JSON.stringify({ output: { message: { content: [{ text: NO_GAP_TEXT }] } }, stopReason: 'end_turn' })),
+    baseFetch: async () => new Response(gpuChatBody(NO_GAP_TEXT)),
     installFetch: (fetchImpl) => { installedFetch = fetchImpl; },
     createRouter: () => ({
       route: async (input) => {
-        await installedFetch('https://bedrock.example/router', {});
+        await installedFetch('http://gpu.example/v1/chat/completions', {});
         return buildNoGapRouted(input);
       },
     }),
-    createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'bedrock' }) }),
+    createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'gpu' }) }),
     createMatcher: async () => REGEX_MATCHER,
     createTrigger: async () => RULE_PRODUCTION_TRIGGER,
     readGit: async () => ({ head: 'abc', productionMergeBase: 'def' }),
@@ -329,30 +356,29 @@ test('score 는 판정을 돌려 report·metrics·errors·raw 를 쓴다', async
   assert.equal(rawList[0].capture.rawText, NO_GAP_TEXT);
   assert.deepEqual(rawList[0].input.candidateList, [{ type: 'demonstrative', phrase: '이 부분', start: 0, end: 4 }],
     'production 트리거 후보를 발화 글 기준 위치로 넘긴다');
-  assert.doesNotMatch(fs.readFileSync(path.join(outDir, 'raw.jsonl'), 'utf8'), /token-for-test/);
   const errorList = fs.readFileSync(path.join(outDir, 'errors.jsonl'), 'utf8').trim().split('\n');
   assert.equal(errorList.length, 6, '모드 3개 × 지표 2개');
 });
 
-test('판정기 호출이 Bedrock 에 닿지 못하면(http·no_token) 결과는 쓰되 크게 알리고 1 로 끝난다', async () => {
-  for (const [source, kind] of [['error', 'http'], ['fallback', 'no_token']]) {
+test('판정기 호출이 GPU 서버에 닿지 못하면(http) 결과는 쓰되 크게 알리고 1 로 끝난다', async () => {
+  for (const [source, kind] of [['error', 'http']]) {
     const { dir, inFile } = prepareInput();
     const outDir = path.join(dir, `out-${kind}`);
     const logList = [];
     let installedFetch = null;
     const code = await runScoreCommand({
       argList: ['--in', inFile, '--no-cache', '--matcher', 'regex', '--repeat', '2', '--out-dir', outDir],
-      env: { AWS_BEARER_TOKEN_BEDROCK: 'token-for-test' },
+      env: {},
       log: (line) => logList.push(line),
-      baseFetch: async () => new Response('{"message":"The security token included in the request is expired"}', { status: 403 }),
+      baseFetch: async () => new Response('{"message":"upstream unavailable"}', { status: 503 }),
       installFetch: (fetchImpl) => { installedFetch = fetchImpl; },
       createRouter: () => ({
         route: async () => {
-          if (source === 'error') await installedFetch('https://bedrock.example/router', {});
-          return { candidateList: [], judgeList: [], blockedReason: source === 'error' ? 'judge_error' : 'judge_unavailable', source };
+          await installedFetch('http://gpu.example/v1/chat/completions', {});
+          return { candidateList: [], judgeList: [], blockedReason: 'judge_error', source };
         },
       }),
-      createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'bedrock' }) }),
+      createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'gpu' }) }),
       createMatcher: async () => REGEX_MATCHER,
       createTrigger: async () => RULE_PRODUCTION_TRIGGER,
       readGit: async () => ({ head: 'abc', productionMergeBase: 'def' }),
@@ -360,11 +386,11 @@ test('판정기 호출이 Bedrock 에 닿지 못하면(http·no_token) 결과는
     assert.equal(code, 1, kind);
     assert.deepEqual(fs.readdirSync(outDir).sort(), ['errors.jsonl', 'metrics.json', 'raw.jsonl', 'report.md']);
     const logText = logList.join('\n');
-    assert.match(logText, new RegExp(`\\[score\\] 실패: 판정기 호출 2회가 판정 LLM\\(GPU·Bedrock\\)에 닿지 못했다 \\(${kind} 2\\)`), logText);
+    assert.match(logText, new RegExp(`\\[score\\] 실패: 판정기 호출 2회가 판정 LLM\\(GPU 서버\\)에 닿지 못했다 \\(${kind} 2\\)`), logText);
     assert.match(logText, /캐시에 넣지 않으므로 같은 명령을 다시 돌리면 그것만 다시 묻는다/);
     assert.match(logList.at(-1), /실패: 판정기 호출/);
     const report = fs.readFileSync(path.join(outDir, 'report.md'), 'utf8');
-    assert.match(report.split('\n').slice(0, 12).join('\n'), /주의: 판정기 호출 2회가 판정 LLM\(GPU·Bedrock\)에 닿지 못했다/);
+    assert.match(report.split('\n').slice(0, 12).join('\n'), /주의: 판정기 호출 2회가 판정 LLM\(GPU 서버\)에 닿지 못했다/);
     const { runInfo } = JSON.parse(fs.readFileSync(path.join(outDir, 'metrics.json'), 'utf8'));
     assert.deepEqual(runInfo.requestFailure, { callCount: 2, rowCount: 2, byKindMap: { [kind]: 2 } });
   }
@@ -377,18 +403,18 @@ test('score 는 기본으로 균형(delayed) 모드·항목 전체 맥락으로 
   const routeInputList = [];
   const code = await runScoreCommand({
     argList: ['--in', inFile, '--no-cache', '--matcher', 'regex', '--after-ms', '5000', '--out-dir', outDir],
-    env: { AWS_BEARER_TOKEN_BEDROCK: 'token-for-test' },
+    env: {},
     log: () => {},
     baseFetch: async () => new Response(JSON.stringify({ output: { message: { content: [{ text: NO_GAP_TEXT }] } } })),
     installFetch: (fetchImpl) => { installedFetch = fetchImpl; },
     createRouter: () => ({
       route: async (input) => {
         routeInputList.push(input);
-        await installedFetch('https://bedrock.example/router', {});
+        await installedFetch('http://gpu.example/v1/chat/completions', {});
         return buildNoGapRouted(input);
       },
     }),
-    createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'bedrock' }) }),
+    createJudge: () => ({ judge: async () => ({ hasCue: false, reason: null, source: 'gpu' }) }),
     createMatcher: async () => REGEX_MATCHER,
     createTrigger: async () => RULE_PRODUCTION_TRIGGER,
     readGit: async () => ({ head: 'abc', productionMergeBase: 'def' }),

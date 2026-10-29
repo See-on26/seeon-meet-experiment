@@ -13,7 +13,7 @@ import { buildScorePlan, evaluateScorePlan } from './score-rows.mjs';
 import { buildModeMetrics, listErrorCase } from './detection-metrics.mjs';
 import { buildDetectionReport } from './detection-report.mjs';
 import { formatRunStamp } from './run-stamp.mjs';
-import { loadRepoEnv, assertBedrockToken, REPO_ROOT } from './bedrock-env.mjs';
+import { loadRepoEnv, REPO_ROOT } from './bedrock-env.mjs';
 import { EVAL_MODE_LIST } from './eval-types.mjs';
 import { resolveContextWindow, CONTEXT_PRESET_MAP } from './router-context.mjs';
 import { createProductionTrigger } from './production-trigger.mjs';
@@ -65,7 +65,7 @@ function readMatcherKind(text) {
   return text;
 }
 
-// 옵션은 Bedrock 을 부르기 전에 모두 확인한다.
+// 옵션은 판정기를 부르기 전에 모두 확인한다.
 export function resolveScoreOption(values) {
   const modeList = resolveModeList(values.mode);
   const beforeMs = readOptionalMs(values['before-ms'], '--before-ms');
@@ -84,7 +84,7 @@ export function resolveScoreOption(values) {
 
 const toJsonl = (rowList) => rowList.map((row) => JSON.stringify(row)).join('\n') + (rowList.length ? '\n' : '');
 
-// 판정기 호출이 판정 LLM(GPU·Bedrock)에 닿지 못한 경로 오류. parse·empty_text 는 모델이 낸 응답이라 측정 대상이고, 이 둘은 실행 실패다.
+// 판정기 호출이 판정 LLM(GPU 서버)에 닿지 못한 경로 오류. parse·empty_text 는 모델이 낸 응답이라 측정 대상이고, 이 둘은 실행 실패다.
 const REQUEST_FAIL_KIND_LIST = [PATH_ERROR_MAP.http, PATH_ERROR_MAP.noToken];
 
 export function summarizeRequestFailure({ rawList, rowList }) {
@@ -101,9 +101,9 @@ export function summarizeRequestFailure({ rawList, rowList }) {
 // 토큰 만료·네트워크 오류면 표는 정상처럼 보여도 그 위치가 빠져 있다. 마지막 줄로 크게 알린다.
 function formatRequestFailLine({ requestFailure, totalCallCount }) {
   const kindText = Object.entries(requestFailure.byKindMap).map(([kind, count]) => `${kind} ${count}`).join(' · ');
-  return `[score] 실패: 판정기 호출 ${requestFailure.callCount}회가 판정 LLM(GPU·Bedrock)에 닿지 못했다 (${kindText}) — 전체 ${totalCallCount}회 중.`
+  return `[score] 실패: 판정기 호출 ${requestFailure.callCount}회가 판정 LLM(GPU 서버)에 닿지 못했다 (${kindText}) — 전체 ${totalCallCount}회 중.`
     + ` 결과 파일은 썼지만 판정 결과를 모르는 위치 ${requestFailure.rowCount}개(모드·반복 합계)가 경로 오류다(판정기 성능에서 빠진다).`
-    + ' GPU 서버 연결(터널)·토큰(AWS_BEARER_TOKEN_BEDROCK) 만료·네트워크를 확인한다. 실패한 호출은 캐시에 넣지 않으므로 같은 명령을 다시 돌리면 그것만 다시 묻는다(종료 코드 1).';
+    + ' GPU 서버 연결(터널)·네트워크를 확인한다. 실패한 호출은 캐시에 넣지 않으므로 같은 명령을 다시 돌리면 그것만 다시 묻는다(종료 코드 1).';
 }
 
 export async function runScoreCommand({
@@ -153,12 +153,6 @@ export async function runScoreCommand({
     return 2;
   }
   if (env === process.env) loadRepoEnv();
-  try {
-    assertBedrockToken({ env });
-  } catch (error) {
-    log(`[score] ${error.message}`);
-    return 1;
-  }
   const { itemList, issueList } = validateDetectionItemList({ text: fs.readFileSync(values.in, 'utf8'), isLabeledRequired: true });
   const errorList = issueList.filter((issue) => issue.level === ISSUE_LEVEL_MAP.error);
   if (errorList.length) {
@@ -212,7 +206,6 @@ export async function runScoreCommand({
     startedAt: startedAt.toISOString(),
     inputPath: path.resolve(values.in),
     progress: plan.progress,
-    judgeModelId: config.judgeModelId,
     judgeModelLabel: buildJudgeModelLabel({ config }),
     judgeSourceCountMap: countJudgeSource({ rawList: allRawList }),
     routerMode: config.routerMode,

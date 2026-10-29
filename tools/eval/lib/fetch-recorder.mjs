@@ -34,11 +34,11 @@ export function createFetchRecorder({ baseFetch = globalThis.fetch.bind(globalTh
   return { fetch: recordingFetch, capture };
 }
 
-// 기록된 요청이 하나도 없을 때의 errorMessage. production 이 토큰이 없어 요청 전에 멈춘 경우다.
+// 기록된 요청이 하나도 없을 때의 errorMessage. production 이 요청을 보내기 전에 멈춘 경우다.
 export const NO_REQUEST_ERROR = 'no_request';
 
-// 판정 응답 원문에서 글·종료 사유·사용량을 꺼낸다. Bedrock Converse 와 GPU LLM(OpenAI chat) 두 형식을 읽는다.
-// GPU 가 실패해 Bedrock 으로 넘어간 판정은 마지막 응답이 실제 답이다.
+// 판정 응답 원문에서 글·종료 사유·사용량을 꺼낸다. GPU LLM(OpenAI chat) 형식과, 옛 결과를 다시 읽을 때를 위해 Bedrock Converse 형식도 읽는다.
+// 응답이 여럿이면 마지막 응답이 실제 답이다.
 export function summarizeConverseCapture(captureList) {
   const last = captureList.at(-1);
   if (!last) return { status: null, stopReason: null, usage: null, rawText: null, errorMessage: NO_REQUEST_ERROR, elapsedMs: null };

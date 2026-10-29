@@ -57,11 +57,9 @@ test('실행 기록기는 실행 중에 온 이벤트만 모으고 재생 중인
 test('모델 설정에는 비밀값이 실리지 않는다', () => {
   const config = readPipelineConfig({ AWS_BEARER_TOKEN_BEDROCK: 'secret-token-value', SEEON_BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-5' });
   const modelConfig = pickModelConfig(config);
-  assert.equal(modelConfig.bedrockModelId, 'anthropic.claude-sonnet-5');
-  assert.equal(modelConfig.hasBedrockCredentials, true);
-  assert.doesNotMatch(JSON.stringify(modelConfig), /secret-token-value/);
-  assert.deepEqual([modelConfig.judgeBackend, modelConfig.judgeGpuUrl, modelConfig.judgeGpuModel],
-    ['gpu', 'http://127.0.0.1:8805/v1/chat/completions', 'gemma-4-26b-a4b-qat'], '판단 LLM 이 어느 GPU 서버로 갔는지 남긴다');
+  assert.doesNotMatch(JSON.stringify(modelConfig), /secret-token-value|bedrock/i);
+  assert.deepEqual([modelConfig.judgeGpuUrl, modelConfig.judgeGpuModel],
+    ['http://127.0.0.1:8805/v1/chat/completions', 'gemma-4-26b-a4b-qat'], '판단 LLM 이 어느 GPU 서버로 갔는지 남긴다');
 });
 
 test('모델 설정에 삽입 위치 추론의 모드별 사고 여부·한도·시간을 남기고, 다시 골라도 그대로다', () => {
@@ -112,7 +110,7 @@ function buildRun({ runDir, recordPath, patch = {} }) {
 
 test('결과 폴더 마무리는 정해진 파일을 모두 쓰고 그 세션 레코드만 남긴다', async () => {
   const { runDir, recordPath } = prepareRunDir();
-  const result = await finalizeRun({ run: buildRun({ runDir, recordPath }), modelConfig: { bedrockModelId: 'm' } });
+  const result = await finalizeRun({ run: buildRun({ runDir, recordPath }), modelConfig: { vlmModel: 'm' } });
   assert.deepEqual(fs.readdirSync(runDir).sort(), [
     'ad-timeline.json', 'ad.srt', 'flow.json', 'output-audio.webm', 'pipeline.jsonl', 'run.json', 's-condition.txt', 'slides', 'slides.json', 'transcript.json', 'transcript.txt',
   ]);
@@ -178,8 +176,7 @@ test('원본 파이프라인 설정을 그대로 넘겨도 결과 폴더 어느 
   });
   await finalizeRun({ run: buildRun({ runDir, recordPath }), modelConfig: config });
   const runInfo = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
-  assert.equal('bedrockApiKey' in runInfo.modelConfig, false);
-  assert.equal(runInfo.modelConfig.hasBedrockCredentials, true);
+  assert.deepEqual(Object.keys(runInfo.modelConfig).filter((key) => /bedrock/i.test(key)), []);
   assert.equal(runInfo.modelConfig.vlmUrl, 'http://127.0.0.1:8801/v1/chat/completions');
   assert.equal(runInfo.modelConfig.asrUrl, 'http://127.0.0.1:8802/asr');
   for (const name of fs.readdirSync(runDir)) {

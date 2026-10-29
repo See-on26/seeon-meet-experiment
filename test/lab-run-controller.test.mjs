@@ -126,7 +126,7 @@ function createHarness({
     createOutputWriter: createWriter,
     setViewerPreset: (preset) => presetList.push(preset),
     labRootDir,
-    modelConfig: { bedrockModelId: 'm' },
+    modelConfig: { vlmModel: 'm' },
     getLayout,
     notify: (status) => statusList.push(status),
     onPlayback,

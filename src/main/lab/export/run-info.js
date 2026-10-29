@@ -3,12 +3,11 @@ const { LAB_MODE_LABEL_MAP } = require('../lab-mode');
 const { GAP_REQUEST_BY_MODE_MAP } = require('../../caption-pipeline/output/gap-inference-agent');
 
 // 모델 이름과 엔드포인트만 남긴다. 토큰·키 같은 비밀값은 목록에 없어서 실리지 않는다.
-// 판단 LLM 은 VLM 과 따로 띄운 GPU 서버(judgeGpuUrl)가 답한다. judgeModelId 는 판정 백엔드를 bedrock 으로 골랐을 때만 판정에 쓴다.
+// 판단 LLM 은 VLM 과 따로 띄운 GPU 서버(judgeGpuUrl)가 답한다.
 // 삽입 위치 추론도 같은 GPU 서버(judgeGpuModel)가 답하고, 모드별 사고 여부·한도·시간은 gapRequestByModeMap 에 남긴다.
 const MODEL_CONFIG_KEY_LIST = [
-  'vlmUrl', 'vlmModel', 'asrUrl', 'ttsUrl', 'ttsLongUrl', 'embedUrl', 'bedrockRegion', 'bedrockModelId',
-  'judgeBackend', 'judgeGpuUrl', 'judgeGpuModel', 'judgeModelId',
-  'gapRequestByModeMap', 'routerMode', 'isScaleEnabled', 'hasBedrockCredentials',
+  'vlmUrl', 'vlmModel', 'asrUrl', 'ttsUrl', 'ttsLongUrl', 'embedUrl', 'judgeGpuUrl', 'judgeGpuModel',
+  'gapRequestByModeMap', 'routerMode', 'isScaleEnabled',
   // 해설 내용·화면 근거 스위치. 실험실 회차마다 무엇을 켜고 돌렸는지 run.json 만 보고 알 수 있게 남긴다.
   'contentSwitch', 'isScreenTextGroundingEnabled', 'isFactCardEnabled', 'factCardAgentList', 'factCardJsonMode', 'chartEstimateMode',
   'speechRoiMode', 'speechRoiTypeList', 'isSpeechRoiFrameOcrEnabled', 'isSpeechRoiPointingPairEnabled',

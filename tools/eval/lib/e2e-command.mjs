@@ -13,12 +13,11 @@ import { buildE2eReport, buildFilterReport } from './e2e-report.mjs';
 import { buildAnswerCsv } from './answer-csv.mjs';
 import { createCacheStore } from './cache-store.mjs';
 import { formatRunStamp } from './run-stamp.mjs';
-import { loadRepoEnv, assertBedrockToken, REPO_ROOT } from './bedrock-env.mjs';
+import { loadRepoEnv, assertBedrockToken, readBedrockConfig, REPO_ROOT } from './bedrock-env.mjs';
+import { requestConverseText } from './bedrock-converse.mjs';
 import { judgeRunAsrLanguage, describeAsrLanguageMismatch } from './e2e-language.mjs';
 
 const require = createRequire(import.meta.url);
-const { readPipelineConfig } = require('../../../src/main/caption-pipeline/config.js');
-const { requestConverseText } = require('../../../src/main/caption-pipeline/agents/shared/bedrock-converse.js');
 const { readGitInfo } = require('../../../src/main/lab/git-info.js');
 const { EVAL_PRESET_MODE } = require('../../../src/main/lab/lab-mode.js');
 const { formatMediaClock } = require('../../../src/main/lab/export/clock-format.js');
@@ -237,13 +236,12 @@ export async function runE2eCommand({
     return 1;
   }
 
-  const config = readPipelineConfig(env);
-  const modelId = values.model || config.bedrockModelId;
+  const bedrockConfig = readBedrockConfig({ env });
+  const modelId = values.model || bedrockConfig.bedrockModelId;
   const isSameModelWarning = isSameModel({ generatorModel: questionSet.generatorModel, modelId });
   if (isSameModelWarning) log(`[e2e] 주의: 답변 모델(${modelId})이 문항 생성 모델(${questionSet.generatorModel})과 같다`);
-  // 인증·URL·inferenceConfig 는 production Bedrock 호출을 그대로 쓴다.
   const answer = requestAnswer || ((request) => requestConverseText({
-    config, modelId: request.modelId, systemPrompt: request.systemPrompt, messageList: request.messageList,
+    config: bedrockConfig, modelId: request.modelId, systemPrompt: request.systemPrompt, messageList: request.messageList,
     maxTokens: ANSWER_MAX_TOKENS, timeoutMs: ANSWER_TIMEOUT_MS, label: 'e2e 답변',
   }));
   const { materialMap, materialErrorMap, resolvedRunDirMap, runStatusMap } = loadMaterialMap({ questionSet, runDirMap, log });

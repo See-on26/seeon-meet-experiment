@@ -45,7 +45,6 @@ export const PRODUCTION_SOURCE_FILE_LIST_MAP = {
     'src/main/caption-pipeline/router/unified-router.js',
     'src/main/caption-pipeline/prompts/unified-router.js',
     'src/main/caption-pipeline/trigger/speech-trigger.js',
-    'src/main/caption-pipeline/agents/shared/bedrock-converse.js',
     'src/main/caption-pipeline/agents/shared/judge-llm.js',
     'src/main/caption-pipeline/config.js',
     'src/main/caption-pipeline/contracts/narration-types.js',
@@ -53,7 +52,6 @@ export const PRODUCTION_SOURCE_FILE_LIST_MAP = {
   silence: [
     'src/main/caption-pipeline/router/silence-judge.js',
     'src/main/caption-pipeline/prompts/silence-judge.js',
-    'src/main/caption-pipeline/agents/shared/bedrock-converse.js',
     'src/main/caption-pipeline/agents/shared/judge-llm.js',
     'src/main/caption-pipeline/config.js',
   ],
@@ -108,7 +106,8 @@ export function isSilenceTextWellFormed(text) {
   }
 }
 
-// production 라우터는 판정 LLM 을 쓸 수 없으면(fallback) 부르지 않고, 호출이 실패하면(error) 모든 후보를 X 로 둔다.
+// production 라우터는 GPU 판정 호출이 실패하면(error) 모든 후보를 X 로 둔다. GPU 판정은 200 응답이라도 글이 비면 실패로 던지므로,
+// 기록한 응답이 200 이면 연결 실패가 아니라 빈 글로 센다.
 // 후보가 없으면(none) 부르지 않는다 — 평가는 후보가 있는 발화만 넘기므로 생기지 않는다.
 // production 판단은 지시 대상·발화 기반 묶음마다 따로 부르고 묶음 안에서 번호를 1부터 매긴다. 호출은 끝난 순서로 기록되므로
 // 응답마다 어느 묶음 것인지 모른다 — 묶음 후보 수를 응답에 하나씩 맞출 수 있는 배치가 있으면 다 읽은 것이다.
@@ -130,8 +129,7 @@ function canAssignCount({ textList, countList }) {
 }
 
 export function classifyRouterPathError({ routed, capture, captureList = null, candidateList = [] }) {
-  if (routed.source === ROUTER_SOURCE_MAP.fallback) return PATH_ERROR_MAP.noToken;
-  if (routed.source === ROUTER_SOURCE_MAP.error) return PATH_ERROR_MAP.http;
+  if (routed.source === ROUTER_SOURCE_MAP.error) return readFailedCallError({ capture, captureList });
   if (routed.source === ROUTER_SOURCE_MAP.none) return null;
   const summaryList = captureList?.length ? captureList : [capture];
   if (summaryList.some((summary) => !summary?.rawText)) return PATH_ERROR_MAP.emptyText;
@@ -141,23 +139,27 @@ export function classifyRouterPathError({ routed, capture, captureList = null, c
   return null;
 }
 
-// production 무발화 판정기는 토큰이 없으면 요청 전에 예외로 끝나 source 가 error 다. 요청이 없었으면 토큰 없음으로 센다.
+// 판정 호출이 실패로 끝났을 때의 경로 오류. 요청이 없었으면 요청 전에 멈춘 것, 200 응답이면 빈 글, 그 밖은 연결·HTTP 실패다.
+function readFailedCallError({ capture, captureList = null }) {
+  const last = captureList?.length ? captureList.at(-1) : capture;
+  if (last?.errorMessage === NO_REQUEST_ERROR) return PATH_ERROR_MAP.noToken;
+  return last?.status === 200 ? PATH_ERROR_MAP.emptyText : PATH_ERROR_MAP.http;
+}
+
 export function classifySilencePathError({ judged, capture }) {
-  if (judged.source === SILENCE_JUDGE_SOURCE_MAP.error) {
-    return capture?.errorMessage === NO_REQUEST_ERROR ? PATH_ERROR_MAP.noToken : PATH_ERROR_MAP.http;
-  }
-  if (![SILENCE_JUDGE_SOURCE_MAP.bedrock, SILENCE_JUDGE_SOURCE_MAP.gpu].includes(judged.source)) return null;
+  if (judged.source === SILENCE_JUDGE_SOURCE_MAP.error) return readFailedCallError({ capture });
+  if (judged.source !== SILENCE_JUDGE_SOURCE_MAP.gpu) return null;
   if (!capture.rawText) return PATH_ERROR_MAP.emptyText;
   if (!isSilenceTextWellFormed(capture.rawText)) return PATH_ERROR_MAP.parse;
   return null;
 }
 
-// 캐시 키·보고서에 쓰는 판정 모델 이름표. gpu 백엔드는 GPU 모델로만 판정한다(실패해도 Bedrock 으로 넘기지 않는다).
+// 캐시 키·보고서에 쓰는 판정 모델 이름표. 판정은 GPU 서버 모델로만 한다.
 export function buildJudgeModelLabel({ config }) {
-  return config.judgeBackend === 'gpu' ? `gpu:${config.judgeGpuModel}` : config.judgeModelId;
+  return `gpu:${config.judgeGpuModel}`;
 }
 
-// 실제로 어느 경로가 답했는지 센다. gpu 백엔드는 Bedrock 으로 넘기지 않으므로, 여기에 bedrock 이 있으면 설정이 어긋난 것이다.
+// 실제로 어느 경로가 답했는지 센다. 판정은 GPU 서버만 하므로 gpu·error 말고 다른 경로가 있으면 설정이 어긋난 것이다.
 export function countJudgeSource({ rawList }) {
   const countMap = {};
   for (const raw of rawList) {

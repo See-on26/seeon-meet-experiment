@@ -10,7 +10,7 @@
 
 ### 0-1. 처음 한 번
 
-필요한 것: macOS, git, Node.js 22 이상(확인 환경 v22.14.0), ffmpeg(`brew install ffmpeg` — 확인용 영상 만들기와 녹음 길이 고치기에 쓴다). GPU 서버 앱 전용 키 파일과 Bedrock 토큰은 저장소에 없으니 따로 준비한다.
+필요한 것: macOS, git, Node.js 22 이상(확인 환경 v22.14.0), ffmpeg(`brew install ffmpeg` — 확인용 영상 만들기와 녹음 길이 고치기에 쓴다). GPU 서버 앱 전용 키 파일과 Bedrock 토큰(3.2 답변 모델용)은 저장소에 없으니 따로 준비한다.
 
 1. 저장소를 받고 실험 브랜치로 바꾼다.
 
@@ -23,14 +23,14 @@
 
    이미 받아 두었으면 `cd seeon-meet && git fetch origin && git checkout experiment && npm ci`.
 
-2. 저장소 맨 위 폴더에 `.env` 파일을 만들고 Bedrock 토큰과 GPU 서버 앱 전용 키 경로를 넣는다. `.env` 는 gitignore 돼 커밋되지 않는다. GPU 서비스 주소(`127.0.0.1:8801`~`8805`)·GPU 서버 SSH 주소·계정·포트·Bedrock 지역·모델은 기본값이 지금 제품 설정이라 따로 적지 않는다.
+2. 저장소 맨 위 폴더에 `.env` 파일을 만들고 GPU 서버 앱 전용 키 경로와, 3.2 를 돌릴 거면 Bedrock 토큰을 넣는다. `.env` 는 gitignore 돼 커밋되지 않는다. GPU 서비스 주소(`127.0.0.1:8801`~`8805`)·GPU 서버 SSH 주소·계정·포트는 기본값이 지금 제품 설정이라 따로 적지 않는다. 3.2 답변 모델의 Bedrock 지역·모델은 `SEEON_BEDROCK_REGION`(기본 `us-east-1`)·`SEEON_BEDROCK_MODEL_ID`(기본 `anthropic.claude-sonnet-5`)로 바꾼다.
 
    ```
    AWS_BEARER_TOKEN_BEDROCK=<Bedrock 토큰>
    SEEON_GPU_SSH_KEY=<앱 전용 키 파일 경로>
    ```
 
-   토큰이 없으면 두 평가 도구가 시작하자마자 멈춘다(3.1 은 GPU 판정이 실패한 호출을 Bedrock 이 대신 판정하지 못해 "판정 실패 → 해설 안 함"으로 떨어지고, 3.2 는 답변 모델을 부를 수 없다). 키는 실험 창이 GPU 서버 터널을 여는 데 쓴다(0-3).
+   3.1 탐지 평가와 실험 창은 판정·해설을 모두 GPU 서버에서만 하므로 Bedrock 토큰이 필요 없다. 3.2 이해도 평가는 문항에 답하는 상용 LLM 을 Bedrock 으로 부르므로, 토큰이 없으면 시작하자마자 멈춘다. 키는 실험 창이 GPU 서버 터널을 여는 데 쓴다(0-3).
 
 3. Kiwi 형태소 분석 모델을 두 곳에 받는다(둘 다 v0.24.0 base 묶음에서 꺼낸다).
 
@@ -69,7 +69,7 @@ npm test
 
 ### 0-3. 실험 창을 돌릴 때: GPU 서버 터널
 
-실험 창(3.2 결과 폴더 만들기)은 GPU 서버의 VLM(8801)·ASR(8802)·TTS(8803)·EMBED(8804)·판정 LLM(8805)이 필요하다. 3.1 탐지 평가와 실험 창은 제품과 같은 판정 LLM 을 쓴다 — 기본은 GPU 서버에서 VLM 과 같은 모델(Gemma 4 26B-A4B, 서빙 이름 `gemma-4-26b-a4b-qat`)을 따로 띄운 판정 LLM(8805)이고, GPU 가 실패해도 Bedrock 으로 넘기지 않는다(`SEEON_JUDGE_BACKEND=bedrock` 이면 Bedrock 만). 어느 서버로 갔는지는 `run.json.modelConfig` 의 `judgeBackend`·`judgeGpuUrl`·`judgeGpuModel` 과 `pipeline.jsonl` 의 `경로=gpu` 로 본다. 3.2 이해 평가는 Bedrock 만 쓴다.
+실험 창(3.2 결과 폴더 만들기)은 GPU 서버의 VLM(8801)·ASR(8802)·TTS(8803)·EMBED(8804)·판정 LLM(8805)이 필요하다. 3.1 탐지 평가와 실험 창은 제품과 같은 판정 LLM 을 쓴다 — 기본은 GPU 서버에서 VLM 과 같은 모델(Gemma 4 26B-A4B, 서빙 이름 `gemma-4-26b-a4b-qat`)을 따로 띄운 판정 LLM(8805)만 쓴다. 어느 서버로 갔는지는 `run.json.modelConfig` 의 `judgeGpuUrl`·`judgeGpuModel` 과 `pipeline.jsonl` 의 `경로=gpu` 로 본다. 3.2 이해 평가의 답변 모델만 Bedrock 을 쓴다.
 
 실험 창은 제품 앱처럼 **켜질 때 GPU 서버의 다섯 포트를 SSH 터널로 이 맥의 같은 포트(`127.0.0.1:8801`~`8805`)에 직접 붙인다.** `.env` 의 `SEEON_GPU_SSH_KEY`(0-1) 만 있으면 따로 할 일이 없다. 그 터널은 실험 창이 떠 있는 동안만 있고, 끊기면 2초부터 최대 30초 간격으로 다시 붙는다.
 
@@ -124,11 +124,11 @@ node tools/eval/validate.mjs out/eval/my-items.jsonl
 node tools/eval/validate.mjs out/eval/my-questions.json
 ```
 
-`형식 오류 없음` 이 나올 때까지 고친다. `[참고]` 줄은 오류가 아니다. 확장자가 `.jsonl` 이면 3.1 항목, 그 밖에는 3.2 문항 셋으로 읽는다. 두 평가 도구도 시작할 때 같은 검사를 하고, 오류가 있으면 Bedrock 을 부르지 않고 멈춘다.
+`형식 오류 없음` 이 나올 때까지 고친다. `[참고]` 줄은 오류가 아니다. 확장자가 `.jsonl` 이면 3.1 항목, 그 밖에는 3.2 문항 셋으로 읽는다. 두 평가 도구도 시작할 때 같은 검사를 하고, 오류가 있으면 판정·답변 모델을 부르지 않고 멈춘다.
 
 ## 2. 3.1 탐지 평가
 
-1. 후보 위치 뽑기(라벨 초안). Bedrock 을 부르지 않는다.
+1. 후보 위치 뽑기(라벨 초안). 판정 LLM 을 부르지 않는다.
 
    ```bash
    node tools/eval/detection-eval.mjs extract --in out/eval/my-items.jsonl --out out/eval/labeling.jsonl
@@ -142,7 +142,7 @@ node tools/eval/validate.mjs out/eval/my-questions.json
 
 2. `out/eval/labeling.jsonl` 의 `isGap: null` 위치에 `true`(공백)·`false`(공백 아님)와 `rationale`(근거)을 채운다. 판단하지 않을 위치는 `null` 로 둔다.
 3. 검사: `node tools/eval/validate.mjs out/eval/labeling.jsonl --labeled`
-4. 채점(판정 LLM 호출 — 기본 GPU 서버 8805, GPU 가 실패해도 Bedrock 으로 넘기지 않는다). `report.md` 머리에 판정 모델과 경로별 호출 수(`gpu`·`bedrock`), production 트리거의 한국어 분석기(Kiwi·대체 규칙)가 나온다. `bedrock` 경로는 `SEEON_JUDGE_BACKEND=bedrock` 일 때만 나온다. gpu 백엔드인데 `bedrock` 이 섞이면 설정이 어긋난 것이라 주의 줄이 붙는다.
+4. 채점(판정 LLM 호출 — GPU 서버 8805 만 쓴다). `report.md` 머리에 판정 모델과 경로별 호출 수(`gpu`·`error`), production 트리거의 한국어 분석기(Kiwi·대체 규칙)가 나온다. 옛 결과를 다시 읽을 때 `bedrock` 이 섞여 있으면 모델이 섞인 결과라 주의 줄이 붙는다.
 
    판정 재현은 production 통합 라우터 계약 그대로다. 발화(문장)마다 production 트리거 후보 구를 번호를 붙여 넘기고, 판단 LLM 이 후보마다 낸 O/X 를 그 위치의 판정으로 읽는다. 말주머니에만 있는 라벨 위치가 있는 발화는 그 위치를 후보로 더한 호출을 한 번 더 부른다 — 판정기 성능은 그 호출, 시스템 성능은 production 후보만 넘긴 호출의 O/X 로 낸다(`raw.jsonl` 의 `role`: `system_judge`·`system`·`judge`).
 
@@ -161,14 +161,14 @@ node tools/eval/validate.mjs out/eval/my-questions.json
    | `--matcher` | `auto` | `kiwi`(모델이 없으면 멈춘다)·`regex`(어절 경계 근사). `auto` 는 Kiwi 를 못 쓰면 근사로 돌고 결과에 적는다 |
    | `--out-dir` | `out/eval/detection-<시각>` | 결과 폴더 |
 
-   옵션은 엄격하게 읽는다. 모르는 옵션, 고를 수 없는 값(`--mode`·`--context`·`--matcher`), 빈 값·글자가 들어간 ms(`--before-ms=`·`--after-ms=7s`), 1 이상의 정수가 아닌 `--repeat`·`--concurrency` 는 Bedrock 을 부르기 전에 사용법과 함께 멈춘다(종료 코드 2). 다른 맥락 창으로 조용히 평가하지 않게 하려는 것이다.
+   옵션은 엄격하게 읽는다. 모르는 옵션, 고를 수 없는 값(`--mode`·`--context`·`--matcher`), 빈 값·글자가 들어간 ms(`--before-ms=`·`--after-ms=7s`), 1 이상의 정수가 아닌 `--repeat`·`--concurrency` 는 판정기를 부르기 전에 사용법과 함께 멈춘다(종료 코드 2). 다른 맥락 창으로 조용히 평가하지 않게 하려는 것이다.
 
    종료 코드
 
    | 코드 | 언제 |
    |---|---|
-   | 0 | 끝까지 돌았고 판정기 호출이 모두 판정 LLM(GPU·Bedrock)에 닿았다(`parse`·`empty_text` 경로 오류는 모델 응답이라 0 이다) |
-   | 1 | 토큰이 없거나 입력 형식 오류로 시작하지 못했다. 또는 판정기 호출 가운데 판정 LLM(GPU·Bedrock)에 닿지 못한 것(`http`·`no_token`)이 있다 — 이때도 결과 폴더는 쓰고, 마지막 줄 `[score] 실패: 판정기 호출 N회가 판정 LLM(GPU·Bedrock)에 닿지 못했다 …` 와 `report.md` 맨 위 "주의" 줄로 알린다. GPU 서버 연결(터널)·토큰 만료·네트워크를 확인하고 같은 명령을 다시 돌린다. 실패한 호출은 캐시에 넣지 않으므로 다시 돌리면 그것만 다시 묻는다(그 결과 폴더는 새로 쓴 것을 쓴다) |
+   | 0 | 끝까지 돌았고 판정기 호출이 모두 판정 LLM(GPU 서버)에 닿았다(`parse`·`empty_text` 경로 오류는 모델 응답이라 0 이다) |
+   | 1 | 입력 형식 오류로 시작하지 못했다. 또는 판정기 호출 가운데 판정 LLM(GPU 서버)에 닿지 못한 것(`http`·`no_token`)이 있다 — 이때도 결과 폴더는 쓰고, 마지막 줄 `[score] 실패: 판정기 호출 N회가 판정 LLM(GPU 서버)에 닿지 못했다 …` 와 `report.md` 맨 위 "주의" 줄로 알린다. GPU 서버 연결(터널)·네트워크를 확인하고 같은 명령을 다시 돌린다. 실패한 호출은 캐시에 넣지 않으므로 다시 돌리면 그것만 다시 묻는다(그 결과 폴더는 새로 쓴 것을 쓴다) |
    | 2 | 옵션이 잘못됐다 |
 
 5. 결과 `out/eval/detection-<시각>/`
@@ -297,7 +297,7 @@ SEEON_LAB_AUTORUN=out/lab-samples/sample-5slides.mp4 npm run lab
 - 결과 폴더를 만들기 전에 실패함: `[lab] 자동 실행 시작 실패: <이유>` 를 찍고 종료 코드 1 로 닫는다. 결과 폴더는 없다.
 
 ### 3-1. Windows 설치본(SEEON Lab)
-- 맥에서 `npm run dist:win:kit -- --app lab --env <.env> --label <받는사람>` 로 만든다. 기준은 `origin/experiment`(`--ref` 로 바꿈)이고, 바탕화면에 `SEEON-Lab-Windows-<시각>-<커밋>-<받는사람>.zip`(설치 파일 + 안내문 + 버전)이 생긴다. 설치 파일에는 GPU 터널 키·Bedrock 토큰이 들어 있으니 공개된 곳에 올리지 않는다.
+- 맥에서 `npm run dist:win:kit -- --app lab --env <.env> --label <받는사람>` 로 만든다. 기준은 `origin/experiment`(`--ref` 로 바꿈)이고, 바탕화면에 `SEEON-Lab-Windows-<시각>-<커밋>-<받는사람>.zip`(설치 파일 + 안내문 + 버전)이 생긴다. 설치본 `.env` 에는 앱이 읽는 `SEEON_` 설정 줄만 들어가고(주석·Bedrock 등 다른 키는 빠진다) GPU 터널 키가 함께 들어가니 공개된 곳에 올리지 않는다.
 - 설치본은 제품 SEEON 과 앱 이름·appId 가 달라(`SEEON Lab`, `kr.seeon.lab`) 한 PC 에 함께 설치된다. 결과 폴더는 `%APPDATA%\seeon-lab\out\lab` 이다(조작 바 **결과 폴더** 로 연다). 설치본에는 git 이 없어 `run.json.git` 은 비어 있다.
 
 ## 4. 3.2 이해도 평가

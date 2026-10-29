@@ -90,13 +90,13 @@ function buildLanguageSectionList(modeMetrics) {
     ].join('\n'));
 }
 
-// 판정기 호출이 판정 LLM(GPU·Bedrock)에 닿지 못한(http·no_token) 실행은 표가 정상처럼 보여도 그 위치가 빠져 있으므로 맨 위에 알린다.
+// 판정기 호출이 판정 LLM(GPU 서버)에 닿지 못한(http·no_token) 실행은 표가 정상처럼 보여도 그 위치가 빠져 있으므로 맨 위에 알린다.
 function buildRequestFailLine(requestFailure) {
   if (!requestFailure?.callCount) return [];
   const kindText = Object.entries(requestFailure.byKindMap).map(([kind, count]) => `${kind} ${count}`).join(' · ');
-  return [`- **주의: 판정기 호출 ${requestFailure.callCount}회가 판정 LLM(GPU·Bedrock)에 닿지 못했다** (${kindText})`
+  return [`- **주의: 판정기 호출 ${requestFailure.callCount}회가 판정 LLM(GPU 서버)에 닿지 못했다** (${kindText})`
     + ` — 판정 결과를 모르는 위치 ${requestFailure.rowCount}개(모드·반복 합계)가 경로 오류다(판정기 성능에서 빠진다).`
-    + ' 토큰(AWS_BEARER_TOKEN_BEDROCK) 만료·네트워크를 확인하고 같은 명령을 다시 돌린다(실패한 호출만 다시 묻는다).'];
+    + ' GPU 서버 연결(터널)·네트워크를 확인하고 같은 명령을 다시 돌린다(실패한 호출만 다시 묻는다).'];
 }
 
 function buildModeSection(modeMetrics) {
@@ -130,14 +130,13 @@ function buildModeSection(modeMetrics) {
   ].join('\n');
 }
 
-// gpu 백엔드면 GPU 모델로 판정하고, GPU 가 실패한 호출만 Bedrock(judgeModelId)이 답한다. 옛 결과(이름표 없음)는 Bedrock 모델만 적는다.
+// 판정은 GPU 서버 모델로만 한다. 옛 결과(이름표 없음)는 그때 판정한 Bedrock 모델 이름을 그대로 적는다.
 function formatJudgeModel(runInfo) {
   const label = runInfo.judgeModelLabel || runInfo.judgeModelId;
-  return label.startsWith('gpu:')
-    ? `GPU ${label.slice('gpu:'.length)} (실패하면 Bedrock ${runInfo.judgeModelId})` : label;
+  return label.startsWith('gpu:') ? `GPU ${label.slice('gpu:'.length)}` : label;
 }
 
-// 실제로 답한 경로별 호출 수. GPU 판정 결과에 Bedrock 답이 섞였으면 모델이 섞인 결과라 따로 알린다.
+// 실제로 답한 경로별 호출 수. 옛 결과처럼 GPU 판정에 Bedrock 답이 섞였으면 모델이 섞인 결과라 따로 알린다.
 function buildJudgeSourceLine(runInfo) {
   const countMap = runInfo.judgeSourceCountMap;
   if (!countMap || !Object.keys(countMap).length) return [];
