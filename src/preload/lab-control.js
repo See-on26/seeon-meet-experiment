@@ -15,4 +15,7 @@ contextBridge.exposeInMainWorld('labControl', {
   openFlow: () => ipcRenderer.invoke('lab-open-flow'),
   getStatus: () => ipcRenderer.invoke('lab-status'),
   onStatus: (callback) => { ipcRenderer.on('lab-status', (_event, status) => callback(status)); },
+  setEvalPreset: ({ isEvalPreset }) => ipcRenderer.invoke('lab-eval-preset', { isEvalPreset }),
+  getEvalPresetState: () => ipcRenderer.invoke('lab-eval-preset-state'),
+  onEvalPresetState: (callback) => { ipcRenderer.on('lab-eval-preset-state', (_event, state) => callback(state)); },
 });

@@ -4,7 +4,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const { captureExposedApi, exposeCapturedApi } = require('./lab/capture-exposed-api');
 const { toForwardedPipelineEvent, buildPlaybackReport } = require('./lab/forward-event');
-const { applyFeatureTogglePreset } = require('../main/lab/feature-toggle-preset');
+const { applyFeatureTogglePreset, readFeatureToggleMap } = require('../main/lab/feature-toggle-preset');
 const { applyCaptionLanguagePreset } = require('../main/lab/meeting-language-preset');
 
 const capturedMap = captureExposedApi({ contextBridge, load: () => require('./viewer.js') });
@@ -23,6 +23,13 @@ exposeCapturedApi({
       // main 이 그 언어로 전사하게 한다. 나머지 값(모드·캡션 언어·화면 글자)은 제품 화면이 보낸 그대로다.
       startPipelineSession(args) {
         return capturedMap.seeon.startPipelineSession({ ...args, asrLanguage: ipcRenderer.sendSync('lab-viewer-meeting-language') });
+      },
+      // 화면이 기능 설정을 main 에 알릴 때(처음 뜰 때·바꿀 때) 실험 쪽에도 실제 상태를 알린다.
+      // 조작 바의 평가 설정과 다르면 평가 설정을 풀고, 실행 기록에 실제 기능 상태를 적는 데 쓴다.
+      setFeatureToggles(args) {
+        const result = capturedMap.seeon.setFeatureToggles(args);
+        ipcRenderer.send('lab-viewer-feature-toggles', readFeatureToggleMap({ storage: window.localStorage }));
+        return result;
       },
       reportLabNarrationPlayback(info) {
         ipcRenderer.send('lab-narration-playback', buildPlaybackReport(info));
