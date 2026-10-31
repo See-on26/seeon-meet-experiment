@@ -18,7 +18,7 @@ function createHarness({
   reloadBehavior = 'ok', stopOutputError = null, finalizeError = null, clickPauseResult = true, isSessionEndImmediate = false,
   recordPath = '/out/pipeline-1.jsonl', finalize = null, createOutputWriter: createWriter = createOutputWriter,
   getLayout = undefined, hangCallList = [], lateLiveDelayMs = null, beforeSessionStart = () => {}, onPlayback = undefined,
-  sessionStartRequest = undefined,
+  sessionStartRequest = undefined, getFeatureToggleMap = undefined,
 } = {}) {
   const clock = { nowMs: new Date(2026, 9, 5, 10, 0, 0).getTime() };
   const callList = [];
@@ -125,6 +125,7 @@ function createHarness({
     readGit: async () => ({ head: 'abc', productionMergeBase: 'def' }),
     createOutputWriter: createWriter,
     setViewerPreset: (preset) => presetList.push(preset),
+    getFeatureToggleMap,
     labRootDir,
     modelConfig: { vlmModel: 'm' },
     getLayout,
@@ -599,4 +600,15 @@ test('미리 불러오기가 실패하거나 응답이 없으면 이유를 돌�
   assert.equal(hungResult.isOk, false);
   assert.match(hungResult.message, /응답이 없었다/);
   assert.equal(hung.controller.getStatus().phase, RUN_PHASE_MAP.idle);
+});
+
+test('실행 기록의 기능 상태는 오른쪽 화면이 실제로 쓴 값이다(평가 설정을 켜고 오른쪽에서 페이지 전환만 켠 경우)', async () => {
+  const actualMap = { page_transition: true, speaker_identity: false, meeting_summary: false };
+  const harness = createHarness({ getFeatureToggleMap: () => actualMap });
+  const result = await harness.controller.start({ videoPath: '/v.mp4', isEvalPreset: true });
+  assert.equal(result.isOk, true);
+  const finished = harness.waitFinished();
+  await harness.controller.stop();
+  await finished;
+  assert.deepEqual(harness.finalizedList[0].run.featureToggleMap, actualMap);
 });

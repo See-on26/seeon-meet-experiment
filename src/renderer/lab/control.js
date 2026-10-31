@@ -47,9 +47,22 @@ $('pickBtn').addEventListener('click', async () => {
     : `[준비] 첫 화면을 띄우지 못했다(시작은 할 수 있다): ${preview?.message || ''}`;
 });
 
+// 평가 설정 체크를 바꾸면 오른쪽 기능 설정(페이지 전환·화자 안내·회의 요약)에 바로 반영한다. 시작 버튼은 오른쪽 설정을 덮어쓰지 않는다.
 $('evalPresetChk').addEventListener('change', () => {
-  if ($('evalPresetChk').checked) $('modeSelect').value = EVAL_PRESET_MODE;
+  const isEvalPreset = $('evalPresetChk').checked;
+  if (isEvalPreset) $('modeSelect').value = EVAL_PRESET_MODE;
+  window.labControl.setEvalPreset({ isEvalPreset }).catch(() => {});
 });
+
+// 오른쪽에서 기능 설정을 평가 설정과 다르게 바꾸면 main 이 평가 설정을 풀고 알려 준다.
+function applyEvalPresetState({ isEvalPreset }) {
+  if ($('evalPresetChk').checked === isEvalPreset) return;
+  $('evalPresetChk').checked = isEvalPreset;
+  if (!isEvalPreset) $('statusText').textContent = '[설정] 오른쪽에서 기능 설정을 바꿔 평가 설정을 풀었다 — 시작하면 오른쪽 설정 그대로 쓴다';
+}
+
+window.labControl.onEvalPresetState(applyEvalPresetState);
+window.labControl.getEvalPresetState().then(applyEvalPresetState).catch(() => {});
 
 $('roiBtn').addEventListener('click', async () => {
   const result = await window.labControl.setRoiEditing({ isEditing: !isRoiEditing });

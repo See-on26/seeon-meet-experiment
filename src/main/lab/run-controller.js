@@ -67,7 +67,7 @@ function createLabError({ code, message }) {
 
 // 실험 1회의 순서를 맡는다: 준비(평가 설정·받아쓰기 언어·캡션 언어·모드·영상) → 녹음·캡처 시작 → 재생 → 영상 끝 → 대기 → 정지 → 결과 폴더.
 function createRunController({
-  viewerDriver, playerDriver, recorder, finalize, readGit, createOutputWriter, setViewerPreset,
+  viewerDriver, playerDriver, recorder, finalize, readGit, createOutputWriter, setViewerPreset, getFeatureToggleMap = null,
   labRootDir, modelConfig, getLayout = () => null, notify = () => {}, onPlayback = () => {}, onRunFinished = () => {},
   mkdir = (dir) => fs.promises.mkdir(dir, { recursive: true }),
   now = Date.now, wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); }),
@@ -238,7 +238,8 @@ function createRunController({
       const git = await Promise.resolve().then(() => readGit()).catch(() => null);
       activeRun = recorder.start({
         runId, runDir, videoPath, videoInfo: load.value ?? null, mode, isEvalPreset,
-        featureToggleMap: buildFeatureTogglePreset({ isEvalPreset }), asrLanguage, captionLanguage, layout: getLayout(), git,
+        // 오른쪽 화면이 실제로 쓴 기능 상태(평가 설정을 켜고 오른쪽에서 바꾼 경우도 그대로). 알 수 없으면 평가 설정 값.
+        featureToggleMap: getFeatureToggleMap?.() ?? buildFeatureTogglePreset({ isEvalPreset }), asrLanguage, captionLanguage, layout: getLayout(), git,
       });
       recorder.setRoiNormRect(roi.value?.roiNormRect ?? null);
       outputWriter = createOutputWriter({ filePath: path.join(runDir, RESULT_FILE_MAP.outputAudio) });
@@ -482,6 +483,6 @@ function createRunController({
 }
 
 module.exports = {
-  createRunController, RUN_PHASE_MAP, RUN_ERROR_MAP, SESSION_END_TIMEOUT_MS, STARTABLE_WAIT_MS, LIVE_WAIT_MS,
+  createRunController, RUN_PHASE_MAP, RUN_ERROR_MAP, IDLE_PHASE_LIST, SESSION_END_TIMEOUT_MS, STARTABLE_WAIT_MS, LIVE_WAIT_MS,
   VIEWER_RELOAD_TIMEOUT_MS, PAGE_CALL_TIMEOUT_MS, VIDEO_LOAD_TIMEOUT_MS, OUTPUT_START_TIMEOUT_MS, OUTPUT_STOP_TIMEOUT_MS,
 };

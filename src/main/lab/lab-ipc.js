@@ -2,11 +2,11 @@ const path = require('path');
 const { BrowserWindow, dialog, shell } = require('electron');
 const { OUT_DIR } = require('../paths');
 const { createRunRecorder } = require('./run-recorder');
-const { createRunController } = require('./run-controller');
+const { createRunController, IDLE_PHASE_LIST } = require('./run-controller');
 const { createViewerDriver } = require('./viewer-driver');
 const { createPlayerDriver } = require('./player-driver');
 const { createOutputWriter } = require('./output-writer');
-const { buildFeatureTogglePreset } = require('./feature-toggle-preset');
+const { createFeaturePresetState } = require('./feature-preset-state');
 const { DEFAULT_LAB_ASR_LANGUAGE, DEFAULT_LAB_CAPTION_LANGUAGE } = require('./meeting-language-preset');
 const { readGitInfo } = require('./git-info');
 const { finalizeRun } = require('./export/finalize-run');
@@ -22,8 +22,16 @@ const LAB_OUT_DIR = path.join(OUT_DIR, 'lab');
 const VIDEO_EXTENSION_LIST = ['mp4', 'mov', 'webm', 'mkv', 'm4v'];
 
 function registerLabIpc({ ipcMain, labWindow, pipelineConfig, onRunFinished = () => {} }) {
-  // 처음 뜰 때부터 평가 설정·받아쓰기 한국어·캡션 한국어로 둔다. 실행마다 조작 바 값으로 바꾸고 viewer 를 새로 불러 적용한다.
-  const presetState = { isEvalPreset: true, asrLanguage: DEFAULT_LAB_ASR_LANGUAGE, captionLanguage: DEFAULT_LAB_CAPTION_LANGUAGE };
+  // 처음 뜰 때부터 받아쓰기 한국어·캡션 한국어로 둔다. 실행마다 조작 바 값으로 바꾸고 viewer 를 새로 불러 적용한다.
+  const presetState = { asrLanguage: DEFAULT_LAB_ASR_LANGUAGE, captionLanguage: DEFAULT_LAB_CAPTION_LANGUAGE };
+  // 평가 설정은 처음 뜰 때와 조작 바 체크를 바꿀 때만 오른쪽 기능 설정에 써 넣는다(시작 때 덮어쓰지 않는다).
+  const featurePresetState = createFeaturePresetState({ isEvalPreset: true });
+  const viewerDriver = createViewerDriver({ getWebContents: () => labWindow.getViewerView()?.webContents });
+  const sendEvalPresetState = () => {
+    const controlView = labWindow.getControlView();
+    if (!controlView || controlView.webContents.isDestroyed()) return;
+    controlView.webContents.send('lab-eval-preset-state', { isEvalPreset: featurePresetState.getIsEvalPreset() });
+  };
   const demoWindowManager = createDemoWindowManager({ BrowserWindow });
   const subtitleWindowManager = createSubtitleWindowManager({ BrowserWindow });
   const subtitleFeed = createSubtitleFeed({ onLine: (line) => subtitleWindowManager.sendLine(line) });
@@ -38,17 +46,18 @@ function registerLabIpc({ ipcMain, labWindow, pipelineConfig, onRunFinished = ()
     flowWindowManager.schedulePush();
   };
   const controller = createRunController({
-    viewerDriver: createViewerDriver({ getWebContents: () => labWindow.getViewerView()?.webContents }),
+    viewerDriver,
     playerDriver: createPlayerDriver({ getWebContents: () => labWindow.getPlayerView()?.webContents }),
     recorder,
     finalize: finalizeRun,
     readGit: readGitInfo,
     createOutputWriter,
     setViewerPreset: ({ isEvalPreset, asrLanguage, captionLanguage }) => {
-      presetState.isEvalPreset = isEvalPreset;
+      if (featurePresetState.setEvalPreset(isEvalPreset).isChanged) sendEvalPresetState();
       presetState.asrLanguage = asrLanguage;
       presetState.captionLanguage = captionLanguage;
     },
+    getFeatureToggleMap: () => featurePresetState.getFeatureToggleMap(),
     labRootDir: LAB_OUT_DIR,
     modelConfig: pickModelConfig(pipelineConfig),
     getLayout: labWindow.getLayout,
@@ -62,7 +71,19 @@ function registerLabIpc({ ipcMain, labWindow, pipelineConfig, onRunFinished = ()
   });
   labWindow.setCaptureRequestListener(controller.handleCaptureRequested);
 
-  ipcMain.on('lab-viewer-preset', (event) => { event.returnValue = buildFeatureTogglePreset(presetState); });
+  ipcMain.on('lab-viewer-preset', (event) => { event.returnValue = featurePresetState.takePendingMap(); });
+  ipcMain.on('lab-viewer-feature-toggles', (_event, map) => {
+    if (featurePresetState.reportViewerMap(map || {}).isEvalPresetReleased) sendEvalPresetState();
+  });
+  // 조작 바에서 평가 설정 체크를 바꾸면, 쉬는 중이면 오른쪽 화면을 바로 새로 불러 기능 설정에 반영한다.
+  ipcMain.handle('lab-eval-preset', async (_event, { isEvalPreset } = {}) => {
+    const { isChanged } = featurePresetState.setEvalPreset(Boolean(isEvalPreset));
+    if (isChanged && IDLE_PHASE_LIST.includes(controller.getStatus().phase)) {
+      viewerDriver.reload().catch((error) => console.warn(`[lab] 평가 설정을 오른쪽 화면에 반영하지 못함: ${error.message}`));
+    }
+    return { isEvalPreset: featurePresetState.getIsEvalPreset() };
+  });
+  ipcMain.handle('lab-eval-preset-state', () => ({ isEvalPreset: featurePresetState.getIsEvalPreset() }));
   // 받아쓰기 언어는 viewer preload 가 세션 시작 때, 캡션 언어는 페이지를 불러올 때 받아 간다.
   ipcMain.on('lab-viewer-meeting-language', (event) => { event.returnValue = presetState.asrLanguage; });
   ipcMain.on('lab-viewer-caption-language', (event) => { event.returnValue = presetState.captionLanguage; });
